@@ -1,0 +1,36 @@
+[package]
+name = "oxide-admin"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pratik Bhujel"]
+description = "A declarative, high-performance Admin & CRUD toolkit for Rust and Axum."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/prateekbhujel/oxide-admin"
+keywords = ["admin", "crud", "axum", "filament", "fullstack"]
+categories = ["web-programming::http-server"]
+
+[dependencies]
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+
+[profile.dev]
+debug = 1
+split-debuginfo = "unpacked"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
