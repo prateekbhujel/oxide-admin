@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FieldType {
     Text,
     Email,
@@ -9,7 +11,7 @@ pub enum FieldType {
     Toggle,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormField {
     pub name: String,
     pub label: String,

@@ -30,6 +30,10 @@ impl RowData {
         self.values.insert(key.into(), val.into());
         self
     }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.values.get(key).map(|s| s.as_str())
+    }
 }
 
 pub trait Resource: Send + Sync {
@@ -41,15 +45,13 @@ pub trait Resource: Send + Sync {
     }
 
     fn table(&self) -> Table;
-    fn form(&self) -> Form {
-        Form::new()
-    }
+    fn form(&self) -> Form;
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize);
-    
-    fn delete_row(&self, _id: &str) -> Result<(), String> {
-        Ok(())
-    }
+    fn get_row(&self, id: &str) -> Option<RowData>;
+    fn create_row(&self, values: HashMap<String, String>) -> Result<String, String>;
+    fn update_row(&self, id: &str, values: HashMap<String, String>) -> Result<(), String>;
+    fn delete_row(&self, id: &str) -> Result<(), String>;
 }
 
 pub type DynResource = Arc<dyn Resource>;
