@@ -2,113 +2,20 @@ use axum::Router;
 use oxide_admin::prelude::*;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-// --- Model 1: User Resource with Real Mutability ---
-#[derive(Clone)]
-struct UserData {
-    id: String,
-    name: String,
-    email: String,
-    role: String,
-    status: String,
-    created_at: String,
-}
+// =========================================================================
+// User Resource (Powered by UserRepository)
+// =========================================================================
 
-#[derive(Clone)]
 pub struct UserResource {
-    data: Arc<RwLock<Vec<UserData>>>,
+    repo: Arc<dyn UserRepository>,
 }
 
 impl UserResource {
-    pub fn new() -> Self {
-        let initial_users = vec![
-            UserData {
-                id: "1".to_string(),
-                name: "Hari Bahadur Bhujel".to_string(),
-                email: "hari.bhujel@oxideadmin.dev".to_string(),
-                role: "Founder".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-01".to_string(),
-            },
-            UserData {
-                id: "2".to_string(),
-                name: "Pratik Bhujel".to_string(),
-                email: "pratik.bhujel@oxideadmin.dev".to_string(),
-                role: "Superadmin".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-02".to_string(),
-            },
-            UserData {
-                id: "3".to_string(),
-                name: "Dharma Raj Shrestha".to_string(),
-                email: "dharma.shrestha@oxideadmin.dev".to_string(),
-                role: "Admin".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-05".to_string(),
-            },
-            UserData {
-                id: "4".to_string(),
-                name: "Gokul Subedi".to_string(),
-                email: "gokul.subedi@oxideadmin.dev".to_string(),
-                role: "Admin".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-08".to_string(),
-            },
-            UserData {
-                id: "5".to_string(),
-                name: "Ranjan Gumanju".to_string(),
-                email: "ranjan.gumanju@oxideadmin.dev".to_string(),
-                role: "Member".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-12".to_string(),
-            },
-            UserData {
-                id: "6".to_string(),
-                name: "Sampanna Rimal".to_string(),
-                email: "sampanna.rimal@oxideadmin.dev".to_string(),
-                role: "Member".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-15".to_string(),
-            },
-            UserData {
-                id: "7".to_string(),
-                name: "Subash Ranabat".to_string(),
-                email: "subash.ranabat@oxideadmin.dev".to_string(),
-                role: "Member".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-19".to_string(),
-            },
-            UserData {
-                id: "8".to_string(),
-                name: "Lasta Chaudhary".to_string(),
-                email: "lasta.chaudhary@oxideadmin.dev".to_string(),
-                role: "Editor".to_string(),
-                status: "Active".to_string(),
-                created_at: "2026-09-22".to_string(),
-            },
-            UserData {
-                id: "9".to_string(),
-                name: "Ryan Koirala".to_string(),
-                email: "ryan.koirala@oxideadmin.dev".to_string(),
-                role: "Member".to_string(),
-                status: "Pending".to_string(),
-                created_at: "2026-10-01".to_string(),
-            },
-            UserData {
-                id: "10".to_string(),
-                name: "Alex Vance".to_string(),
-                email: "alex.vance@example.com".to_string(),
-                role: "Member".to_string(),
-                status: "Suspended".to_string(),
-                created_at: "2026-10-04".to_string(),
-            },
-        ];
-
-        Self {
-            data: Arc::new(RwLock::new(initial_users)),
-        }
+    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+        Self { repo }
     }
 }
 
@@ -164,178 +71,79 @@ impl Resource for UserResource {
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
-        let store = self.data.read().unwrap();
-        let mut filtered: Vec<&UserData> = store.iter().collect();
-
-        if !query.search.is_empty() {
-            let q = query.search.to_lowercase();
-            filtered.retain(|u| {
-                u.name.to_lowercase().contains(&q)
-                    || u.email.to_lowercase().contains(&q)
-                    || u.role.to_lowercase().contains(&q)
-            });
-        }
-
-        if let Some(ref sort_col) = query.sort_by {
-            filtered.sort_by(|a, b| {
-                let cmp = match sort_col.as_str() {
-                    "id" => a.id.parse::<usize>().unwrap_or(0).cmp(&b.id.parse::<usize>().unwrap_or(0)),
-                    "name" => a.name.cmp(&b.name),
-                    "created_at" => a.created_at.cmp(&b.created_at),
-                    _ => std::cmp::Ordering::Equal,
-                };
-                if query.sort_desc { cmp.reverse() } else { cmp }
-            });
-        }
-
-        let total = filtered.len();
-        let page = if query.page == 0 { 1 } else { query.page };
-        let per_page = if query.per_page == 0 { 8 } else { query.per_page };
-        let skip = (page - 1) * per_page;
-
-        let rows = filtered
+        let (users, total) = self.repo.list(query);
+        let rows = users
             .into_iter()
-            .skip(skip)
-            .take(per_page)
             .map(|u| {
                 RowData::new(&u.id)
                     .insert("id", &u.id)
                     .insert("name", &u.name)
                     .insert("email", &u.email)
-                    .insert("role", &u.role)
-                    .insert("status", &u.status)
+                    .insert("role", u.role.as_str())
+                    .insert("status", u.status.as_str())
                     .insert("created_at", &u.created_at)
             })
             .collect();
-
         (rows, total)
     }
 
     fn get_row(&self, id: &str) -> Option<RowData> {
-        let store = self.data.read().unwrap();
-        store.iter().find(|u| u.id == id).map(|u| {
+        self.repo.find_by_id(id).map(|u| {
             RowData::new(&u.id)
                 .insert("name", &u.name)
                 .insert("email", &u.email)
-                .insert("role", &u.role)
-                .insert("status", &u.status)
+                .insert("role", u.role.as_str())
+                .insert("status", u.status.as_str())
         })
     }
 
     fn create_row(&self, values: HashMap<String, String>) -> Result<String, String> {
-        let mut store = self.data.write().unwrap();
-        let next_id = (store.len() + 1).to_string();
-        let user = UserData {
-            id: next_id.clone(),
-            name: values.get("name").cloned().unwrap_or_else(|| "Unnamed".into()),
-            email: values.get("email").cloned().unwrap_or_else(|| "noemail@example.com".into()),
-            role: values.get("role").cloned().unwrap_or_else(|| "Member".into()),
-            status: values.get("status").cloned().unwrap_or_else(|| "Active".into()),
+        let name = values.get("name").cloned().unwrap_or_else(|| "Unnamed".into());
+        let email = values.get("email").cloned().unwrap_or_else(|| "noemail@example.com".into());
+        let role = Role::from_str_loose(values.get("role").map(|s| s.as_str()).unwrap_or("Member"));
+        let status = UserStatus::from_str_loose(values.get("status").map(|s| s.as_str()).unwrap_or("Active"));
+
+        // Generate auto ID
+        let (_, total) = self.repo.list(&QueryState::default());
+        let new_id = (total + 1).to_string();
+
+        let user = User {
+            id: new_id,
+            name,
+            email,
+            role,
+            status,
             created_at: "2026-10-07".to_string(),
         };
-        store.push(user);
-        Ok(next_id)
+
+        self.repo.save(user)
     }
 
     fn update_row(&self, id: &str, values: HashMap<String, String>) -> Result<(), String> {
-        let mut store = self.data.write().unwrap();
-        if let Some(user) = store.iter_mut().find(|u| u.id == id) {
-            if let Some(name) = values.get("name") { user.name = name.clone(); }
-            if let Some(email) = values.get("email") { user.email = email.clone(); }
-            if let Some(role) = values.get("role") { user.role = role.clone(); }
-            if let Some(status) = values.get("status") { user.status = status.clone(); }
-            Ok(())
-        } else {
-            Err("User not found".into())
-        }
+        let name = values.get("name").cloned().unwrap_or_default();
+        let email = values.get("email").cloned().unwrap_or_default();
+        let role = Role::from_str_loose(values.get("role").map(|s| s.as_str()).unwrap_or("Member"));
+        let status = UserStatus::from_str_loose(values.get("status").map(|s| s.as_str()).unwrap_or("Active"));
+
+        self.repo.update(id, name, email, role, status)
     }
 
     fn delete_row(&self, id: &str) -> Result<(), String> {
-        let mut store = self.data.write().unwrap();
-        store.retain(|u| u.id != id);
-        Ok(())
+        self.repo.delete(id)
     }
 }
 
-// --- Model 2: Order Resource with Real Mutability ---
-#[derive(Clone)]
-struct OrderData {
-    id: String,
-    customer: String,
-    amount: String,
-    status: String,
-    date: String,
-}
+// =========================================================================
+// Order Resource (Powered by OrderRepository)
+// =========================================================================
 
-#[derive(Clone)]
 pub struct OrderResource {
-    data: Arc<RwLock<Vec<OrderData>>>,
+    repo: Arc<dyn OrderRepository>,
 }
 
 impl OrderResource {
-    pub fn new() -> Self {
-        let initial_orders = vec![
-            OrderData {
-                id: "ORD-1001".to_string(),
-                customer: "Hari Bahadur Bhujel".to_string(),
-                amount: "$1,500.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-01".to_string(),
-            },
-            OrderData {
-                id: "ORD-1002".to_string(),
-                customer: "Dharma Raj Shrestha".to_string(),
-                amount: "$750.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-02".to_string(),
-            },
-            OrderData {
-                id: "ORD-1003".to_string(),
-                customer: "Gokul Subedi".to_string(),
-                amount: "$320.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-03".to_string(),
-            },
-            OrderData {
-                id: "ORD-1004".to_string(),
-                customer: "Ranjan Gumanju".to_string(),
-                amount: "$490.00".to_string(),
-                status: "Pending".to_string(),
-                date: "2026-10-04".to_string(),
-            },
-            OrderData {
-                id: "ORD-1005".to_string(),
-                customer: "Sampanna Rimal".to_string(),
-                amount: "$850.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-05".to_string(),
-            },
-            OrderData {
-                id: "ORD-1006".to_string(),
-                customer: "Subash Ranabat".to_string(),
-                amount: "$600.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-06".to_string(),
-            },
-            OrderData {
-                id: "ORD-1007".to_string(),
-                customer: "Lasta Chaudhary".to_string(),
-                amount: "$210.00".to_string(),
-                status: "Refunded".to_string(),
-                date: "2026-10-07".to_string(),
-            },
-            OrderData {
-                id: "ORD-1008".to_string(),
-                customer: "Ryan Koirala".to_string(),
-                amount: "$990.00".to_string(),
-                status: "Paid".to_string(),
-                date: "2026-10-07".to_string(),
-            },
-        ];
-
-        Self {
-            data: Arc::new(RwLock::new(initial_orders)),
-        }
+    pub fn new(repo: Arc<dyn OrderRepository>) -> Self {
+        Self { repo }
     }
 }
 
@@ -378,82 +186,65 @@ impl Resource for OrderResource {
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
-        let store = self.data.read().unwrap();
-        let mut filtered: Vec<&OrderData> = store.iter().collect();
-
-        if !query.search.is_empty() {
-            let q = query.search.to_lowercase();
-            filtered.retain(|o| {
-                o.id.to_lowercase().contains(&q)
-                    || o.customer.to_lowercase().contains(&q)
-                    || o.status.to_lowercase().contains(&q)
-            });
-        }
-
-        let total = filtered.len();
-        let page = if query.page == 0 { 1 } else { query.page };
-        let per_page = if query.per_page == 0 { 8 } else { query.per_page };
-        let skip = (page - 1) * per_page;
-
-        let rows = filtered
+        let (orders, total) = self.repo.list(query);
+        let rows = orders
             .into_iter()
-            .skip(skip)
-            .take(per_page)
             .map(|o| {
                 RowData::new(&o.id)
                     .insert("id", &o.id)
                     .insert("customer", &o.customer)
                     .insert("amount", &o.amount)
-                    .insert("status", &o.status)
+                    .insert("status", o.status.as_str())
                     .insert("date", &o.date)
             })
             .collect();
-
         (rows, total)
     }
 
     fn get_row(&self, id: &str) -> Option<RowData> {
-        let store = self.data.read().unwrap();
-        store.iter().find(|o| o.id == id).map(|o| {
+        self.repo.find_by_id(id).map(|o| {
             RowData::new(&o.id)
                 .insert("customer", &o.customer)
                 .insert("amount", &o.amount)
-                .insert("status", &o.status)
+                .insert("status", o.status.as_str())
         })
     }
 
     fn create_row(&self, values: HashMap<String, String>) -> Result<String, String> {
-        let mut store = self.data.write().unwrap();
-        let next_id = format!("ORD-{}", 1000 + store.len() + 1);
-        let order = OrderData {
-            id: next_id.clone(),
-            customer: values.get("customer").cloned().unwrap_or_else(|| "Customer".into()),
-            amount: values.get("amount").cloned().unwrap_or_else(|| "$100.00".into()),
-            status: values.get("status").cloned().unwrap_or_else(|| "Paid".into()),
+        let customer = values.get("customer").cloned().unwrap_or_else(|| "Customer".into());
+        let amount = values.get("amount").cloned().unwrap_or_else(|| "$100.00".into());
+        let status = OrderStatus::from_str_loose(values.get("status").map(|s| s.as_str()).unwrap_or("Paid"));
+
+        let (_, total) = self.repo.list(&QueryState::default());
+        let new_id = format!("ORD-{}", 1000 + total + 1);
+
+        let order = Order {
+            id: new_id,
+            customer,
+            amount,
+            status,
             date: "2026-10-07".to_string(),
         };
-        store.push(order);
-        Ok(next_id)
+
+        self.repo.save(order)
     }
 
     fn update_row(&self, id: &str, values: HashMap<String, String>) -> Result<(), String> {
-        let mut store = self.data.write().unwrap();
-        if let Some(order) = store.iter_mut().find(|o| o.id == id) {
-            if let Some(customer) = values.get("customer") { order.customer = customer.clone(); }
-            if let Some(amount) = values.get("amount") { order.amount = amount.clone(); }
-            if let Some(status) = values.get("status") { order.status = status.clone(); }
-            Ok(())
-        } else {
-            Err("Order not found".into())
-        }
+        let customer = values.get("customer").cloned().unwrap_or_default();
+        let amount = values.get("amount").cloned().unwrap_or_default();
+        let status = OrderStatus::from_str_loose(values.get("status").map(|s| s.as_str()).unwrap_or("Paid"));
+
+        self.repo.update(id, customer, amount, status)
     }
 
     fn delete_row(&self, id: &str) -> Result<(), String> {
-        let mut store = self.data.write().unwrap();
-        store.retain(|o| o.id != id);
-        Ok(())
+        self.repo.delete(id)
     }
 }
+
+// =========================================================================
+// Main Server Entrypoint
+// =========================================================================
 
 #[tokio::main]
 async fn main() {
@@ -462,10 +253,20 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let admin = AdminPanel::new()
-        .register(UserResource::new())
-        .register(OrderResource::new());
+    // 1. Initialize Repositories (Repository Pattern)
+    let user_repo = Arc::new(InMemoryUserRepository::new());
+    let order_repo = Arc::new(InMemoryOrderRepository::new());
 
+    // 2. Initialize Resources with injected Repositories
+    let user_resource = UserResource::new(user_repo);
+    let order_resource = OrderResource::new(order_repo);
+
+    // 3. Register into AdminPanel
+    let admin = AdminPanel::new()
+        .register(user_resource)
+        .register(order_resource);
+
+    // 4. Mount into Axum Router
     let app = Router::new()
         .nest("/admin", admin.into_router())
         .route("/", axum::routing::get(|| async {
@@ -474,9 +275,8 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("\n========================================================");
-    println!("⚡ OxideAdmin Production-Ready Server Active");
-    println!("👉 Open: http://127.0.0.1:3000/admin");
-    println!("🔑 Default Credentials: pratik.bhujel@oxideadmin.dev / admin123");
+    println!("OxideAdmin Server running at http://127.0.0.1:3000/admin");
+    println!("Default credentials: pratik.bhujel@oxideadmin.dev / admin123");
     println!("========================================================\n");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
