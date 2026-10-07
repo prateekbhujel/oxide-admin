@@ -11,7 +11,7 @@ use axum::{
 use serde::Deserialize;
 use crate::auth;
 use crate::resource::{DynResource, QueryState, Resource};
-use crate::view::{layout, table_view};
+use crate::view::{dialogs, layout, table_view};
 
 #[derive(Clone, Default)]
 pub struct AdminPanel {
@@ -149,6 +149,7 @@ async fn resource_page(
     let flash = query_params.flash.clone();
     let query_state = parse_query(query_params);
     let table_html = table_view::render_table_partial(res.as_ref(), &query_state);
+    let dialogs_html = dialogs::render_dialogs(res.as_ref());
     let wrapped_content = format!(r#"<div id="table-wrapper">{table_html}</div>"#);
 
     let full_html = layout::render_page(
@@ -156,6 +157,7 @@ async fn resource_page(
         &slug,
         &panel.resources,
         &wrapped_content,
+        &dialogs_html,
         flash.as_deref(),
     );
 

@@ -3,7 +3,6 @@ use crate::table::{Column, ColumnType};
 
 pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> String {
     let table_def = resource.table();
-    let form_def = resource.form();
     let (rows, total_count) = resource.fetch_rows(query);
 
     let per_page = if query.per_page == 0 { 8 } else { query.per_page };
@@ -11,10 +10,6 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
     let total_pages = (total_count + per_page - 1) / per_page;
     let start_idx = if total_count == 0 { 0 } else { (current_page - 1) * per_page + 1 };
     let end_idx = (start_idx + rows.len()).saturating_sub(1);
-
-    // Form fields serialized to JSON for modal injection
-    let form_fields_json = serde_json::to_string(&form_def.fields).unwrap_or_else(|_| "[]".to_string());
-    let escaped_form_fields_json = form_fields_json.replace('"', "&quot;");
 
     // Build Table Header
     let mut header_th = String::new();
@@ -81,21 +76,19 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
                 row_tds.push_str(&format!(r#"<td class="px-5 py-3.5 whitespace-nowrap text-xs text-zinc-200">{rendered_cell}</td>"#));
             }
 
-            // Edit and Delete Actions
+            // Edit and Delete Actions wired to native HTML dialogs
             let row_values_json = serde_json::to_string(&row.values).unwrap_or_else(|_| "{}".to_string());
             let escaped_row_values_json = row_values_json.replace('"', "&quot;");
 
             let actions_html = format!(
-                r#"<button type="button" onclick="openEditModal('{slug}', '{name}', '{id}', '{fields}', '{values}')" class="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors" title="Edit">
+                r#"<button type="button" onclick="openEditDialog('{slug}', '{id}', '{values}')" class="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors" title="Edit">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                 </button>
-                <button type="button" onclick="confirmDelete('{slug}', '{id}')" class="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete">
+                <button type="button" onclick="openDeleteDialog('{slug}', '{id}')" class="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                 </button>"#,
                 slug = resource.slug(),
-                name = resource.name(),
                 id = row.id,
-                fields = escaped_form_fields_json,
                 values = escaped_row_values_json
             );
 
@@ -129,7 +122,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
                 <span class="text-[11px] text-zinc-500 font-mono">{total_count} records</span>
                 <button 
                     type="button" 
-                    onclick="openCreateModal('{slug}', '{name}', '{fields}')"
+                    onclick="openCreateDialog()"
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
                     <span>New {name}</span>
@@ -177,7 +170,6 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
         plural = resource.plural_name(),
         search_val = query.search,
         total_count = total_count,
-        fields = escaped_form_fields_json,
         header_th = header_th,
         body_rows = body_rows,
         start_idx = start_idx,

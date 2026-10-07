@@ -62,7 +62,7 @@ pub fn render_login_page(error_msg: Option<&str>) -> String {
                 </svg>
             </div>
             <h1 class="text-xl font-medium tracking-tight text-zinc-100">Sign in to OxideAdmin</h1>
-            <p class="text-xs text-zinc-500 mt-1">High-performance Rust enterprise dashboard</p>
+            <p class="text-xs text-zinc-500 mt-1">Sign in to your account to continue</p>
         </div>
 
         <!-- Auth Card -->
@@ -107,11 +107,6 @@ pub fn render_login_page(error_msg: Option<&str>) -> String {
                     </button>
                 </div>
             </form>
-        </div>
-
-        <div class="mt-6 text-center text-xs text-zinc-600 font-mono">
-            Protected by Rust Session Security
-        </div>
     </div>
 </body>
 </html>"#

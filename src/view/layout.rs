@@ -5,6 +5,7 @@ pub fn render_page(
     current_slug: &str,
     resources: &[DynResource],
     content_html: &str,
+    dialogs_html: &str,
     flash_message: Option<&str>,
 ) -> String {
     let mut sidebar_nav = String::new();
@@ -12,7 +13,7 @@ pub fn render_page(
     for res in resources {
         let is_active = res.slug() == current_slug;
         let active_classes = if is_active {
-            "bg-zinc-800/80 text-zinc-100 font-medium border-l-2 border-zinc-100"
+            "bg-zinc-800 text-zinc-100 font-medium"
         } else {
             "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60"
         };
@@ -37,7 +38,7 @@ pub fn render_page(
 
     let toast_html = if let Some(msg) = flash_message {
         format!(
-            r#"<div id="flash-toast" class="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg bg-zinc-900 border border-zinc-700/80 shadow-2xl text-xs text-zinc-200 animate-fade-in">
+            r#"<div id="flash-toast" class="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-zinc-900 border border-zinc-700 shadow-xl text-xs text-zinc-200 animate-fade-in">
                 <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 <span>{msg}</span>
                 <button type="button" onclick="document.getElementById('flash-toast').remove()" class="ml-2 text-zinc-500 hover:text-zinc-300">&times;</button>
@@ -87,15 +88,16 @@ pub fn render_page(
     <style>
         body {{ font-family: 'Geist Sans', system-ui, -apple-system, sans-serif; }}
         .loading-shimmer {{ opacity: 0.6; pointer-events: none; transition: opacity 0.15s ease; }}
-        @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(6px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-        .animate-fade-in {{ animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }}
+        dialog::backdrop {{ background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); }}
+        @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+        .animate-fade-in {{ animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards; }}
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex antialiased selection:bg-zinc-800 selection:text-white">
     <!-- Sidebar -->
     <aside class="w-60 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
-        <!-- Brand Header -->
-        <div class="h-14 flex items-center justify-between px-4 border-b border-zinc-800">
+        <!-- Brand Header (Clean, zero marketing badges) -->
+        <div class="h-14 flex items-center px-4 border-b border-zinc-800">
             <div class="flex items-center gap-2.5">
                 <div class="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center">
                     <svg class="w-4 h-4 text-zinc-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -104,11 +106,8 @@ pub fn render_page(
                         <polyline points="2 12 12 17 22 12"></polyline>
                     </svg>
                 </div>
-                <div>
-                    <span class="text-xs font-semibold tracking-tight text-zinc-100">Oxide<span class="text-zinc-400 font-normal">Admin</span></span>
-                </div>
+                <span class="text-xs font-semibold tracking-tight text-zinc-100">OxideAdmin</span>
             </div>
-            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">Rust</span>
         </div>
 
         <!-- Navigation Links -->
@@ -127,7 +126,7 @@ pub fn render_page(
                 </div>
                 <div class="min-w-0">
                     <span class="block text-xs font-medium text-zinc-200 truncate">Pratik Bhujel</span>
-                    <span class="block text-[10px] text-zinc-500 font-mono truncate">Lead Architect</span>
+                    <span class="block text-[10px] text-zinc-500 truncate">Architect</span>
                 </div>
             </div>
             <a href="/admin/logout" title="Sign Out" class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
@@ -138,18 +137,15 @@ pub fn render_page(
 
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <!-- Topbar -->
+        <!-- Topbar (Clean breadcrumbs, zero marketing text) -->
         <header class="h-14 border-b border-zinc-800 bg-zinc-950/80 flex items-center justify-between px-8 backdrop-blur-md sticky top-0 z-10">
             <div class="flex items-center gap-2 text-xs">
-                <span class="text-zinc-500">Resources</span>
+                <span class="text-zinc-500">Workspace</span>
                 <span class="text-zinc-600">/</span>
                 <span class="text-zinc-200 font-medium">{title}</span>
             </div>
-
             <div class="flex items-center gap-3">
-                <span class="text-[11px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
-                    Engine: Axum 0.7
-                </span>
+                <span class="text-xs text-zinc-500 font-mono">⌘K</span>
             </div>
         </header>
 
@@ -159,32 +155,10 @@ pub fn render_page(
         </div>
     </main>
 
+    {dialogs_html}
     {toast_html}
 
-    <!-- Universal Modal Container for Create/Edit -->
-    <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 hidden flex items-center justify-center p-4">
-        <div id="modal-box" class="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full shadow-2xl overflow-hidden animate-fade-in">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-                <h3 id="modal-title" class="text-sm font-medium text-zinc-100">Create Record</h3>
-                <button type="button" onclick="closeModal()" class="text-zinc-500 hover:text-zinc-300 text-lg leading-none">&times;</button>
-            </div>
-            <form id="modal-form" method="POST" action="" class="p-5 space-y-4">
-                <div id="modal-fields" class="space-y-3">
-                    <!-- Dynamic form fields injected here -->
-                </div>
-                <div class="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
-                    <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
-                        Cancel
-                    </button>
-                    <button type="submit" id="modal-submit-btn" class="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors">
-                        Save Record
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Client Script for Live Updates & Modals -->
+    <!-- Clean Client Script for Table Refresh and Native Dialogs -->
     <script>
         let searchTimeout;
         function updateTable(slug, params = {{}}) {{
@@ -237,72 +211,32 @@ pub fn render_page(
             updateTable(slug, {{ page: page }});
         }}
 
-        // Modal Controls
-        function openCreateModal(slug, resourceName, fieldsJson) {{
-            const fields = JSON.parse(fieldsJson);
-            document.getElementById('modal-title').textContent = 'New ' + resourceName;
-            document.getElementById('modal-form').action = '/admin/' + slug + '/create';
-            document.getElementById('modal-submit-btn').textContent = 'Create ' + resourceName;
-
-            let fieldsHtml = '';
-            for (const f of fields) {{
-                fieldsHtml += `
-                    <div>
-                        <label class="block text-xs font-medium text-zinc-300 mb-1">$&#123;f.label&#125;</label>
-                        $&#123;renderFieldInput(f, '')&#125;
-                    </div>
-                `;
-            }}
-            document.getElementById('modal-fields').innerHTML = fieldsHtml;
-            document.getElementById('modal-backdrop').classList.remove('hidden');
+        // Native HTML5 Dialog Triggers
+        function openCreateDialog() {{
+            const dlg = document.getElementById('create-dialog');
+            if (dlg) dlg.showModal();
         }}
 
-        function openEditModal(slug, resourceName, id, fieldsJson, valuesJson) {{
-            const fields = JSON.parse(fieldsJson);
+        function openEditDialog(slug, id, valuesJson) {{
             const values = JSON.parse(valuesJson);
-            document.getElementById('modal-title').textContent = 'Edit ' + resourceName + ' #' + id;
-            document.getElementById('modal-form').action = '/admin/' + slug + '/edit/' + id;
-            document.getElementById('modal-submit-btn').textContent = 'Update ' + resourceName;
+            const form = document.getElementById('edit-form');
+            if (form) form.action = '/admin/' + slug + '/edit/' + id;
 
-            let fieldsHtml = '';
-            for (const f of fields) {{
-                const val = values[f.name] || '';
-                fieldsHtml += `
-                    <div>
-                        <label class="block text-xs font-medium text-zinc-300 mb-1">$&#123;f.label&#125;</label>
-                        $&#123;renderFieldInput(f, val)&#125;
-                    </div>
-                `;
+            for (const [key, val] of Object.entries(values)) {{
+                const input = document.getElementById('edit-field-' + key);
+                if (input) input.value = val;
             }}
-            document.getElementById('modal-fields').innerHTML = fieldsHtml;
-            document.getElementById('modal-backdrop').classList.remove('hidden');
+
+            const dlg = document.getElementById('edit-dialog');
+            if (dlg) dlg.showModal();
         }}
 
-        function renderFieldInput(f, val) {{
-            if (f.field_type.Select) {{
-                let opts = '';
-                for (const [k, label] of f.field_type.Select.options) {{
-                    const sel = (k === val) ? 'selected' : '';
-                    opts += `<option value="$&#123;k&#125;" $&#123;sel&#125;>$&#123;label&#125;</option>`;
-                }}
-                return `<select name="$&#123;f.name&#125;" class="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-600">$&#123;opts&#125;</select>`;
-            }}
-            const type = f.field_type === 'Email' ? 'email' : 'text';
-            return `<input type="$&#123;type&#125;" name="$&#123;f.name&#125;" value="$&#123;val&#125;" required class="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-600" />`;
-        }}
+        function openDeleteDialog(slug, id) {{
+            const form = document.getElementById('delete-form');
+            if (form) form.action = '/admin/' + slug + '/delete/' + id;
 
-        function closeModal() {{
-            document.getElementById('modal-backdrop').classList.add('hidden');
-        }}
-
-        function confirmDelete(slug, id) {{
-            if (confirm('Are you sure you want to delete this record?')) {{
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/admin/' + slug + '/delete/' + id;
-                document.body.appendChild(form);
-                form.submit();
-            }}
+            const dlg = document.getElementById('delete-dialog');
+            if (dlg) dlg.showModal();
         }}
 
         // Auto dismiss flash toast
@@ -316,6 +250,7 @@ pub fn render_page(
         title = title,
         sidebar_nav = sidebar_nav,
         content_html = content_html,
+        dialogs_html = dialogs_html,
         toast_html = toast_html
     )
 }
