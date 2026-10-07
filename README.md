@@ -4,7 +4,7 @@
 > With a solid Rust foundation and a polished UI, OxideAdmin handles your frontend and backend together so you can focus on what makes your product unique.
 
 [![CI](https://github.com/prateekbhujel/oxide-admin/actions/workflows/rust.yml/badge.svg)](https://github.com/prateekbhujel/oxide-admin/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha%20(v0.1)-yellow.svg)](https://github.com/prateekbhujel/oxide-admin)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-red.svg)](https://www.rust-lang.org)
 
@@ -47,9 +47,11 @@ OxideAdmin uses the **Repository Pattern** so your application code never locks 
 
 ### 1. Add to `Cargo.toml`
 
+While v0.1 is in active development, install directly from GitHub:
+
 ```toml
 [dependencies]
-oxide-admin = "0.1"
+oxide-admin = { git = "https://github.com/prateekbhujel/oxide-admin" }
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -113,15 +115,6 @@ impl Resource for UserResource {
         (rows, total)
     }
 
-    fn create_row(&self, values: std::collections::HashMap<String, String>) -> Result<String, String> {
-        // Persist directly to your repository
-        Ok("1".into())
-    }
-
-    fn update_row(&self, id: &str, values: std::collections::HashMap<String, String>) -> Result<(), String> {
-        Ok(())
-    }
-
     fn delete_row(&self, id: &str) -> Result<(), String> {
         self.repo.delete(id)
     }
@@ -137,19 +130,22 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
+    // 1. Initialize SQLite database
     let db_conn = Arc::new(Mutex::new(
         rusqlite::Connection::open("oxide.db").unwrap()
     ));
 
+    // 2. Initialize repository and resource
     let user_repo = Arc::new(SqliteUserRepository::new(db_conn).unwrap());
-
     let admin = AdminPanel::new()
         .register(UserResource::new(user_repo));
 
+    // 3. Mount into Axum Router
     let app = Router::new()
         .nest("/admin", admin.into_router());
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    println!("OxideAdmin running at http://127.0.0.1:3000/admin");
     axum::serve(listener, app).await.unwrap();
 }
 ```
@@ -166,6 +162,19 @@ cargo run --example demo
 
 Open **`http://127.0.0.1:3000/admin`** in your browser.  
 Default credentials: `pratik.bhujel@oxideadmin.dev` / `admin123`.
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Axum 0.7 routing and session cookie authentication
+- [x] Repository pattern with SQLite persistence (`rusqlite`)
+- [x] Server-rendered HTML5 dialog modals (Create, Edit, Delete)
+- [x] Live debounced search and pagination
+- [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
+- [ ] PostgreSQL and SeaORM repository adapters
+- [ ] Bulk actions and CSV export queue
+- [ ] File uploads with Cloudflare R2 / AWS S3 presigned URLs
 
 ---
 

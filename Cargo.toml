@@ -25,6 +25,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 name = "demo"
 path = "examples/demo.rs"
 
+[[example]]
+name = "quickstart"
+path = "examples/quickstart.rs"
+
 [profile.dev]
 debug = 1
 split-debuginfo = "unpacked"

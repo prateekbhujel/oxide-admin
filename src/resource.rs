@@ -45,13 +45,28 @@ pub trait Resource: Send + Sync {
     }
 
     fn table(&self) -> Table;
-    fn form(&self) -> Form;
+
+    fn form(&self) -> Form {
+        Form::new()
+    }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize);
-    fn get_row(&self, id: &str) -> Option<RowData>;
-    fn create_row(&self, values: HashMap<String, String>) -> Result<String, String>;
-    fn update_row(&self, id: &str, values: HashMap<String, String>) -> Result<(), String>;
-    fn delete_row(&self, id: &str) -> Result<(), String>;
+
+    fn get_row(&self, _id: &str) -> Option<RowData> {
+        None
+    }
+
+    fn create_row(&self, _values: HashMap<String, String>) -> Result<String, String> {
+        Err("Create not supported for this resource".into())
+    }
+
+    fn update_row(&self, _id: &str, _values: HashMap<String, String>) -> Result<(), String> {
+        Err("Update not supported for this resource".into())
+    }
+
+    fn delete_row(&self, _id: &str) -> Result<(), String> {
+        Err("Delete not supported for this resource".into())
+    }
 }
 
 pub type DynResource = Arc<dyn Resource>;
