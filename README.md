@@ -1,7 +1,7 @@
 # ⚡ OxideAdmin
 
-> **The declarative, ultra-fast Admin & CRUD engine for Rust and Axum.**  
-> Zero JavaScript build tools. Zero React/Node context-switching. Single static binary.
+> **Build fullstack apps & admin panels fast, for your bright ideas.**  
+> With a solid Rust foundation and a polished UI, OxideAdmin handles your frontend and backend together so you can focus on what makes your product unique.
 
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -9,16 +9,36 @@
 
 ---
 
-## 💡 Why OxideAdmin?
+## 💡 The Philosophy: Truly Fullstack
 
-In web ecosystems like Laravel and Rails, tools like **Filament** and **ActiveAdmin** allowed solo developers and teams to build complex admin dashboards, data tables, and back-office tools in minutes.
+Most modern web development forces you to build two separate applications:
+1. A backend API in Rust, Go, or Python.
+2. A completely separate frontend in React, Next.js, or Vue, requiring `npm`, `package.json`, Vite configs, state managers, and hundreds of megabytes of `node_modules`.
 
-In Rust, teams are frequently forced to:
-1. Spin up a separate Node.js / Vite / React / Next.js repository.
-2. Manually write REST API endpoints, serializers, and CORS handlers.
-3. Deal with 5,000+ lines of fragile UI glue code for basic tables, pagination, and forms.
+**OxideAdmin unites frontend and backend into a single Rust codebase.** 
 
-**OxideAdmin eliminates the frontend tax completely.** Define your resource in 20 lines of Rust, mount it into your `axum::Router`, and get an Apple/Linear-grade dark-mode dashboard running on **~15MB of RAM** with sub-millisecond response times.
+You define your models, repositories, and resources in pure Rust. OxideAdmin renders server-driven, Linear-grade interfaces with native modal dialogs, real-time live search, and full CRUD operations with zero frontend build steps.
+
+---
+
+## 🏗️ Clean Repository Architecture
+
+OxideAdmin uses the **Repository Pattern** so your application code never locks into a specific database. Swap between SQLite, PostgreSQL, or in-memory testing by changing a single line:
+
+```
+              ┌──────────────────────────────────────┐
+              │             UserResource             │
+              └──────────────────┬───────────────────┘
+                                 │
+                    UserRepository Trait Interface
+                                 │
+         ┌───────────────────────┴───────────────────────┐
+         ▼                                               ▼
+┌───────────────────────────────┐       ┌───────────────────────────────┐
+│     SqliteUserRepository      │  ...  │     PostgresUserRepository    │
+│  (Persistent local oxide.db)  │       │  (Production Enterprise DB)   │
+└───────────────────────────────┘       └───────────────────────────────┘
+```
 
 ---
 
@@ -31,14 +51,24 @@ In Rust, teams are frequently forced to:
 oxide-admin = "0.1"
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 ```
 
-### 2. Define a Resource
+### 2. Define Your Resource
 
 ```rust
 use oxide_admin::prelude::*;
+use std::sync::Arc;
 
-pub struct UserResource;
+pub struct UserResource {
+    repo: Arc<dyn UserRepository>,
+}
+
+impl UserResource {
+    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+        Self { repo }
+    }
+}
 
 impl Resource for UserResource {
     fn name(&self) -> &str { "User" }
@@ -51,21 +81,48 @@ impl Resource for UserResource {
             .column(Column::text("name").label("Name").searchable().sortable())
             .column(Column::text("email").label("Email").searchable())
             .column(Column::badge("role", vec![
-                ("Admin", "indigo"),
+                ("Founder", "amber"),
+                ("Admin", "blue"),
                 ("Member", "slate"),
             ]))
             .column(Column::badge("status", vec![
                 ("Active", "emerald"),
                 ("Suspended", "rose"),
             ]))
-            .action(TableAction::new("edit", "Edit"))
-            .action(TableAction::new("delete", "Delete").danger())
+            .page_size(8)
+    }
+
+    fn form(&self) -> Form {
+        Form::new()
+            .field(FormField::text("name").required().placeholder("Full Name"))
+            .field(FormField::email("email").required().placeholder("email@example.com"))
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
-        // Query your database (SQLx, Diesel, SeaORM) or in-memory state
-        let rows = vec![/* ... */];
-        (rows, 100)
+        let (users, total) = self.repo.list(query);
+        let rows = users.into_iter().map(|u| {
+            RowData::new(&u.id)
+                .insert("id", &u.id)
+                .insert("name", &u.name)
+                .insert("email", &u.email)
+                .insert("role", u.role.as_str())
+                .insert("status", u.status.as_str())
+                .insert("created_at", &u.created_at)
+        }).collect();
+        (rows, total)
+    }
+
+    fn create_row(&self, values: std::collections::HashMap<String, String>) -> Result<String, String> {
+        // Persist directly to your repository
+        Ok("1".into())
+    }
+
+    fn update_row(&self, id: &str, values: std::collections::HashMap<String, String>) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn delete_row(&self, id: &str) -> Result<(), String> {
+        self.repo.delete(id)
     }
 }
 ```
@@ -75,11 +132,18 @@ impl Resource for UserResource {
 ```rust
 use axum::Router;
 use oxide_admin::prelude::*;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
+    let db_conn = Arc::new(Mutex::new(
+        rusqlite::Connection::open("oxide.db").unwrap()
+    ));
+
+    let user_repo = Arc::new(SqliteUserRepository::new(db_conn).unwrap());
+
     let admin = AdminPanel::new()
-        .register(UserResource);
+        .register(UserResource::new(user_repo));
 
     let app = Router::new()
         .nest("/admin", admin.into_router());
@@ -91,16 +155,6 @@ async fn main() {
 
 ---
 
-## 🎯 Features
-
-- **⚡ Blazing Fast**: Microsecond render latency, powered directly by native Rust and Axum.
-- **🎨 Modern Dark UI**: Linear/Tailwind aesthetic with zero CSS setup.
-- **🔄 Live Reactive Updates**: Real-time debounced search, column sorting, and pagination without full page reloads.
-- **📦 Single Binary Deployment**: Zero `node_modules`, zero npm build steps. Compiles into a single production binary.
-- **🛡️ Type-Safe**: Zero runtime template errors; backed by Rust's strict type system.
-
----
-
 ## 🏃 Running the Demo
 
 Clone the repo and run:
@@ -109,7 +163,8 @@ Clone the repo and run:
 cargo run --example demo
 ```
 
-Then open `http://127.0.0.1:3000/admin` in your browser.
+Open **`http://127.0.0.1:3000/admin`** in your browser.  
+Default credentials: `pratik.bhujel@oxideadmin.dev` / `admin123`.
 
 ---
 

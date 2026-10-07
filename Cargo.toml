@@ -3,7 +3,7 @@ name = "oxide-admin"
 version = "0.1.0"
 edition = "2021"
 authors = ["Pratik Bhujel"]
-description = "A declarative, high-performance Admin & CRUD toolkit for Rust and Axum."
+description = "Build fullstack apps and admin panels fast in Rust. One unified codebase for frontend and backend."
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/prateekbhujel/oxide-admin"
@@ -19,6 +19,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [[example]]
 name = "demo"
