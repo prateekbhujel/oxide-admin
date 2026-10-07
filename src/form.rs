@@ -1,0 +1,90 @@
+#[derive(Debug, Clone)]
+pub enum FieldType {
+    Text,
+    Email,
+    Password,
+    Number,
+    Select { options: Vec<(String, String)> },
+    Textarea,
+    Toggle,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormField {
+    pub name: String,
+    pub label: String,
+    pub field_type: FieldType,
+    pub required: bool,
+    pub placeholder: Option<String>,
+}
+
+impl FormField {
+    pub fn text(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            label: capitalize(&name),
+            name,
+            field_type: FieldType::Text,
+            required: false,
+            placeholder: None,
+        }
+    }
+
+    pub fn email(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            label: capitalize(&name),
+            name,
+            field_type: FieldType::Email,
+            required: false,
+            placeholder: None,
+        }
+    }
+
+    pub fn select(name: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
+        let name = name.into();
+        Self {
+            label: capitalize(&name),
+            name,
+            field_type: FieldType::Select {
+                options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            },
+            required: false,
+            placeholder: None,
+        }
+    }
+
+    pub fn required(mut self) -> Self {
+        self.required = true;
+        self
+    }
+
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = Some(text.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Form {
+    pub fields: Vec<FormField>,
+}
+
+impl Form {
+    pub fn new() -> Self {
+        Self { fields: Vec::new() }
+    }
+
+    pub fn field(mut self, field: FormField) -> Self {
+        self.fields.push(field);
+        self
+    }
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+    }
+}
