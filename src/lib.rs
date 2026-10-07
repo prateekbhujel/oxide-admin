@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod form;
 pub mod panel;
 pub mod resource;
