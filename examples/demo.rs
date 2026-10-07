@@ -253,9 +253,14 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // 1. Initialize Repositories (Repository Pattern)
-    let user_repo = Arc::new(InMemoryUserRepository::new());
-    let order_repo = Arc::new(InMemoryOrderRepository::new());
+    // Open or create SQLite connection to local file "oxide.db"
+    let db_conn = Arc::new(std::sync::Mutex::new(
+        rusqlite::Connection::open("oxide.db").expect("Failed to open SQLite database oxide.db"),
+    ));
+
+    // 1. Initialize Repositories (Powered by real SQLite database)
+    let user_repo = Arc::new(SqliteUserRepository::new(db_conn.clone()).unwrap());
+    let order_repo = Arc::new(SqliteOrderRepository::new(db_conn).unwrap());
 
     // 2. Initialize Resources with injected Repositories
     let user_resource = UserResource::new(user_repo);

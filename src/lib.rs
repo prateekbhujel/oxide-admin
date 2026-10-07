@@ -12,7 +12,8 @@ pub mod prelude {
     pub use crate::form::{Form, FormField};
     pub use crate::panel::AdminPanel;
     pub use crate::repository::{
-        InMemoryOrderRepository, InMemoryUserRepository, OrderRepository, UserRepository,
+        InMemoryOrderRepository, InMemoryUserRepository, OrderRepository, SqliteOrderRepository,
+        SqliteUserRepository, UserRepository,
     };
     pub use crate::resource::{QueryState, Resource, RowData};
     pub use crate::table::{Column, Table, TableAction};
