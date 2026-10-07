@@ -3,6 +3,7 @@
 > **Build fullstack apps & admin panels fast, for your bright ideas.**  
 > With a solid Rust foundation and a polished UI, OxideAdmin handles your frontend and backend together so you can focus on what makes your product unique.
 
+[![CI](https://github.com/prateekbhujel/oxide-admin/actions/workflows/rust.yml/badge.svg)](https://github.com/prateekbhujel/oxide-admin/actions/workflows/rust.yml)
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-red.svg)](https://www.rust-lang.org)
