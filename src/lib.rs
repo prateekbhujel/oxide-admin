@@ -8,13 +8,14 @@ pub mod table;
 pub mod view;
 
 pub mod prelude {
-    pub use crate::domain::{Order, OrderStatus, Role, User, UserStatus};
+    pub use crate::domain::{AuditLog, Order, OrderStatus, Role, User, UserStatus};
     pub use crate::form::{Form, FormField};
     pub use crate::panel::AdminPanel;
     pub use crate::repository::{
-        InMemoryOrderRepository, InMemoryUserRepository, OrderRepository, SqliteOrderRepository,
-        SqliteUserRepository, UserRepository,
+        AuditRepository, InMemoryAuditRepository, InMemoryOrderRepository, InMemoryUserRepository,
+        OrderRepository, SqliteAuditRepository, SqliteOrderRepository, SqliteUserRepository,
+        UserRepository,
     };
-    pub use crate::resource::{QueryState, Resource, RowData};
+    pub use crate::resource::{AuditLogResource, QueryState, Resource, RowData};
     pub use crate::table::{Column, Table, TableAction};
 }

@@ -152,6 +152,43 @@ async fn main() {
 
 ---
 
+---
+
+## 🛡️ Declarative Roles & Resource Policies (RBAC)
+
+OxideAdmin includes built-in, type-safe Role-Based Access Control inspired by Laravel Gates and Spatie Permissions:
+
+- **Roles & Permissions**: Fine-grained permissions (`users.view`, `users.create`, `orders.delete`, `audit.view`, etc.) configured per role (`Founder`, `Superadmin`, `Admin`, `Editor`, `Member`).
+- **Resource Policy Hooks**: Override `can_view`, `can_create`, `can_edit`, and `can_delete` on any `Resource`.
+- **Permission-Driven UI**: Unauthorized buttons (`New Record`, `Edit`, `Delete`) are omitted server-side. Direct unauthorized POST requests return `403 Forbidden`.
+
+```rust
+impl Resource for OrderResource {
+    // Only users with 'orders.delete' can see or execute delete
+    fn can_delete(&self, user: &User) -> bool {
+        user.can("orders.delete")
+    }
+}
+```
+
+---
+
+## 📜 Activity Audit Trail
+
+Track system mutations automatically. Register the `AuditLogResource` to view immutable audit events stored in SQLite:
+
+```rust
+let audit_repo = Arc::new(SqliteAuditRepository::new(db_conn.clone()).unwrap());
+
+let admin = AdminPanel::new()
+    .users(user_repo)
+    .audit(audit_repo.clone())
+    .register(UserResource::new(user_repo))
+    .register(AuditLogResource::new(audit_repo));
+```
+
+---
+
 ## 🏃 Running the Demo
 
 Clone the repo and run:
@@ -161,7 +198,11 @@ cargo run --example demo
 ```
 
 Open **`http://127.0.0.1:3000/admin`** in your browser.  
-Default credentials: `pratik.bhujel@oxideadmin.dev` / `admin123`.
+Demo accounts (password for all: `admin123`):
+- **Superadmin**: `pratik.bhujel@oxideadmin.dev` (Full access)
+- **Admin**: `dharma.shrestha@oxideadmin.dev` (Manage users and orders)
+- **Editor**: `lasta.chaudhary@oxideadmin.dev` (Manage orders, read-only users)
+- **Member**: `ranjan.gumanju@oxideadmin.dev` (Read-only access)
 
 ---
 
@@ -171,6 +212,9 @@ Default credentials: `pratik.bhujel@oxideadmin.dev` / `admin123`.
 - [x] Repository pattern with SQLite persistence (`rusqlite`)
 - [x] Server-rendered HTML5 dialog modals (Create, Edit, Delete)
 - [x] Live debounced search and pagination
+- [x] Role-Based Access Control (RBAC) with declarative resource policies
+- [x] Permission-driven UI rendering with 403 Forbidden security guards
+- [x] Activity audit trail logging with SQLite persistence (`AuditLogResource`)
 - [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
 - [ ] PostgreSQL and SeaORM repository adapters
 - [ ] Bulk actions and CSV export queue

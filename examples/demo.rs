@@ -260,16 +260,21 @@ async fn main() {
 
     // 1. Initialize Repositories (Powered by real SQLite database)
     let user_repo = Arc::new(SqliteUserRepository::new(db_conn.clone()).unwrap());
-    let order_repo = Arc::new(SqliteOrderRepository::new(db_conn).unwrap());
+    let order_repo = Arc::new(SqliteOrderRepository::new(db_conn.clone()).unwrap());
+    let audit_repo = Arc::new(SqliteAuditRepository::new(db_conn).unwrap());
 
     // 2. Initialize Resources with injected Repositories
-    let user_resource = UserResource::new(user_repo);
+    let user_resource = UserResource::new(user_repo.clone());
     let order_resource = OrderResource::new(order_repo);
+    let audit_resource = AuditLogResource::new(audit_repo.clone());
 
-    // 3. Register into AdminPanel
+    // 3. Register into AdminPanel with RBAC user store & audit logger
     let admin = AdminPanel::new()
+        .users(user_repo)
+        .audit(audit_repo)
         .register(user_resource)
-        .register(order_resource);
+        .register(order_resource)
+        .register(audit_resource);
 
     // 4. Mount into Axum Router
     let app = Router::new()
@@ -281,7 +286,11 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("\n========================================================");
     println!("OxideAdmin Server running at http://127.0.0.1:3000/admin");
-    println!("Default credentials: pratik.bhujel@oxideadmin.dev / admin123");
+    println!("Demo Accounts (Password for all: admin123):");
+    println!("  • Superadmin : pratik.bhujel@oxideadmin.dev (Full Access)");
+    println!("  • Admin      : dharma.shrestha@oxideadmin.dev (Manage users & orders)");
+    println!("  • Editor     : lasta.chaudhary@oxideadmin.dev (Manage orders, view users)");
+    println!("  • Member     : ranjan.gumanju@oxideadmin.dev (Read-only)");
     println!("========================================================\n");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

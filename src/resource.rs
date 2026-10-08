@@ -67,6 +67,105 @@ pub trait Resource: Send + Sync {
     fn delete_row(&self, _id: &str) -> Result<(), String> {
         Err("Delete not supported for this resource".into())
     }
+
+    // Policy Hooks (Declarative RBAC & Gate authorization)
+    fn can_view(&self, user: &crate::domain::User) -> bool {
+        user.can(&format!("{}.view", self.slug()))
+    }
+
+    fn can_create(&self, user: &crate::domain::User) -> bool {
+        user.can(&format!("{}.create", self.slug()))
+    }
+
+    fn can_edit(&self, user: &crate::domain::User) -> bool {
+        user.can(&format!("{}.edit", self.slug()))
+    }
+
+    fn can_delete(&self, user: &crate::domain::User) -> bool {
+        user.can(&format!("{}.delete", self.slug()))
+    }
 }
 
 pub type DynResource = Arc<dyn Resource>;
+
+/// Built-in immutable Audit Log Resource
+pub struct AuditLogResource {
+    repo: Arc<dyn crate::repository::AuditRepository>,
+}
+
+impl AuditLogResource {
+    pub fn new(repo: Arc<dyn crate::repository::AuditRepository>) -> Self {
+        Self { repo }
+    }
+}
+
+impl Resource for AuditLogResource {
+    fn name(&self) -> &str {
+        "Audit Log"
+    }
+
+    fn plural_name(&self) -> &str {
+        "Audit Trail"
+    }
+
+    fn slug(&self) -> &str {
+        "audit"
+    }
+
+    fn icon(&self) -> &str {
+        "shield"
+    }
+
+    fn table(&self) -> Table {
+        Table::new()
+            .column(crate::table::Column::text("timestamp").label("Timestamp").sortable())
+            .column(crate::table::Column::text("user_name").label("Operator").searchable().sortable())
+            .column(crate::table::Column::badge("action", vec![
+                ("CREATE", "emerald"),
+                ("UPDATE", "blue"),
+                ("DELETE", "rose"),
+            ]))
+            .column(crate::table::Column::badge("resource", vec![
+                ("users", "amber"),
+                ("orders", "indigo"),
+            ]))
+            .column(crate::table::Column::text("record_id").label("Target ID").searchable())
+            .column(crate::table::Column::text("details").label("Change Summary").searchable())
+            .page_size(8)
+    }
+
+    fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
+        let (logs, total) = self.repo.list(query);
+        let rows = logs
+            .into_iter()
+            .map(|l| {
+                RowData::new(&l.id)
+                    .insert("id", &l.id)
+                    .insert("timestamp", &l.timestamp)
+                    .insert("user_name", &l.user_name)
+                    .insert("action", &l.action)
+                    .insert("resource", &l.resource)
+                    .insert("record_id", &l.record_id)
+                    .insert("details", &l.details)
+            })
+            .collect();
+        (rows, total)
+    }
+
+    // Immutable system audit trail policy: Superadmin / Founder only, no manual write/mutation
+    fn can_view(&self, user: &crate::domain::User) -> bool {
+        user.can("audit.view")
+    }
+
+    fn can_create(&self, _user: &crate::domain::User) -> bool {
+        false
+    }
+
+    fn can_edit(&self, _user: &crate::domain::User) -> bool {
+        false
+    }
+
+    fn can_delete(&self, _user: &crate::domain::User) -> bool {
+        false
+    }
+}
