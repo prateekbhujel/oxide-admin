@@ -157,3 +157,106 @@ fn test_domain_json_camel_case_serialization() {
     assert!(log_json.contains("\"userName\":\"Pratik\""));
     assert!(log_json.contains("\"recordId\":\"2\""));
 }
+
+struct FilamentPolicyResource;
+impl Resource for FilamentPolicyResource {
+    fn name(&self) -> &str { "Invoice" }
+    fn plural_name(&self) -> &str { "Invoices" }
+    fn slug(&self) -> &str { "invoices" }
+    fn table(&self) -> Table {
+        Table::new().column(Column::text("status"))
+    }
+    fn form(&self) -> Form { Form::new() }
+    fn fetch_rows(&self, _query: &QueryState) -> (Vec<RowData>, usize) {
+        let r1 = RowData::new("1").insert("status", "Draft");
+        let r2 = RowData::new("2").insert("status", "Settled");
+        (vec![r1, r2], 2)
+    }
+
+    #[allow(non_snake_case)]
+    fn canEditRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canEdit(user) {
+            return false;
+        }
+        row.get("status") != Some("Settled")
+    }
+
+    #[allow(non_snake_case)]
+    fn canDeleteRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canDelete(user) {
+            return false;
+        }
+        row.get("status") != Some("Settled")
+    }
+}
+
+#[test]
+fn test_filament_record_level_authorization_hooks() {
+    let res = FilamentPolicyResource;
+    let admin_user = User {
+        id: "1".into(),
+        name: "Admin".into(),
+        email: "admin@example.com".into(),
+        role: Role::Superadmin,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+    let member_user = User {
+        id: "2".into(),
+        name: "Member".into(),
+        email: "member@example.com".into(),
+        role: Role::Member,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+
+    let draft_row = RowData::new("1").insert("status", "Draft");
+    let settled_row = RowData::new("2").insert("status", "Settled");
+
+    // Member cannot edit or delete invoices at all
+    assert!(!res.canEdit(&member_user));
+    assert!(!res.canEditRow(&member_user, &draft_row));
+    assert!(!res.canDeleteRow(&member_user, &draft_row));
+
+    // Admin has invoices.edit & invoices.delete, but Settled records are locked
+    assert!(res.canEdit(&admin_user));
+    assert!(res.canDelete(&admin_user));
+
+    // Draft row is editable and deletable
+    assert!(res.canEditRow(&admin_user, &draft_row));
+    assert!(res.canDeleteRow(&admin_user, &draft_row));
+
+    // Settled row is locked by record-level policy
+    assert!(!res.canEditRow(&admin_user, &settled_row));
+    assert!(!res.canDeleteRow(&admin_user, &settled_row));
+
+    // Both camelCase and snake_case aliases work interchangeably
+    assert!(!res.can_edit_row(&admin_user, &settled_row));
+    assert!(!res.can_delete_row(&admin_user, &settled_row));
+}
+
+#[test]
+fn test_filament_policy_table_view_action_buttons() {
+    let res = FilamentPolicyResource;
+    let admin_user = User {
+        id: "1".into(),
+        name: "Admin".into(),
+        email: "admin@example.com".into(),
+        role: Role::Superadmin,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+
+    let query = QueryState::default();
+    let html = oxide_admin::view::table_view::render_table_partial(&res, &query, &admin_user);
+
+    // Row 1 (Draft) should have edit and delete dialog triggers
+    assert!(html.contains("openEditDialog('invoices', '1'"));
+    assert!(html.contains("openDeleteDialog('invoices', '1'"));
+
+    // Row 2 (Settled) should NOT have edit or delete dialog triggers
+    assert!(!html.contains("openEditDialog('invoices', '2'"));
+    assert!(!html.contains("openDeleteDialog('invoices', '2'"));
+    assert!(html.contains("—")); // Fallback dash for disabled row actions
+}
+

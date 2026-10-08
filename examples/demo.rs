@@ -158,6 +158,16 @@ impl Resource for UserResource {
     fn delete_row(&self, id: &str) -> Result<(), String> {
         self.repo.delete(id)
     }
+
+    /// Filament-style record policy: Superadmin / Founder accounts cannot be deleted
+    #[allow(non_snake_case)]
+    fn canDeleteRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canDelete(user) {
+            return false;
+        }
+        let role = row.get("role").unwrap_or("");
+        role != "Superadmin" && role != "Founder"
+    }
 }
 
 // =========================================================================
@@ -282,6 +292,24 @@ impl Resource for OrderResource {
 
     fn delete_row(&self, id: &str) -> Result<(), String> {
         self.repo.delete(id)
+    }
+
+    /// Filament-style record policy: Refunded orders are locked and cannot be edited
+    #[allow(non_snake_case)]
+    fn canEditRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canEdit(user) {
+            return false;
+        }
+        row.get("status") != Some("Refunded")
+    }
+
+    /// Filament-style record policy: Paid orders cannot be deleted (accounting compliance)
+    #[allow(non_snake_case)]
+    fn canDeleteRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canDelete(user) {
+            return false;
+        }
+        row.get("status") != Some("Paid")
     }
 }
 

@@ -154,19 +154,37 @@ async fn main() {
 
 ---
 
-## 🛡️ Declarative Roles & Resource Policies (RBAC)
+## 🛡️ Declarative Roles & Filament-Style Policies (RBAC)
 
-OxideAdmin includes built-in, type-safe Role-Based Access Control inspired by Laravel Gates and Spatie Permissions:
+OxideAdmin includes built-in, type-safe authorization inspired directly by **Filament PHP Policy hooks** and **Laravel Gates**:
 
 - **Roles & Permissions**: Fine-grained permissions (`users.view`, `users.create`, `orders.delete`, `audit.view`, etc.) configured per role (`Founder`, `Superadmin`, `Admin`, `Editor`, `Member`).
-- **Resource Policy Hooks**: Override `can_view`, `can_create`, `can_edit`, and `can_delete` on any `Resource`.
-- **Permission-Driven UI**: Unauthorized buttons (`New Record`, `Edit`, `Delete`) are omitted server-side. Direct unauthorized POST requests return `403 Forbidden`.
+- **Resource Policy Hooks**: Override `canView`, `canCreate`, `canEdit`, and `canDelete` on any `Resource`.
+- **Record-Level Policy Hooks (Filament Parity)**: Override `canEditRow` and `canDeleteRow` to enforce row-level conditions (e.g. lock settled/refunded records, protect superadmin accounts).
+- **Permission-Driven UI & Hard Server Enforcement**: Unauthorized action buttons (`New Record`, `Edit`, `Delete`) are omitted conditionally per row in server-rendered HTML. Direct unauthorized mutations return `403 Forbidden`.
 
 ```rust
 impl Resource for OrderResource {
-    // Only users with 'orders.delete' can see or execute delete
-    fn can_delete(&self, user: &User) -> bool {
-        user.can("orders.delete")
+    // 1. General permission gate (Filament canEdit)
+    fn canEdit(&self, user: &User) -> bool {
+        user.can("orders.edit")
+    }
+
+    // 2. Record-level conditional policy (Filament canEdit(Model $record))
+    // Automatically hides edit button and blocks updates for locked orders!
+    fn canEditRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canEdit(user) {
+            return false;
+        }
+        row.get("status") != Some("Refunded")
+    }
+
+    // 3. Record-level deletion policy (Filament canDelete(Model $record))
+    fn canDeleteRow(&self, user: &User, row: &RowData) -> bool {
+        if !self.canDelete(user) {
+            return false;
+        }
+        row.get("status") != Some("Paid") // Paid orders cannot be deleted
     }
 }
 ```

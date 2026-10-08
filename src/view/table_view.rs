@@ -72,11 +72,11 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
             cols_len = cols_len
         ));
     } else {
-        let can_edit = resource.can_edit(user);
-        let can_delete = resource.can_delete(user);
         let mode = resource.form_mode();
 
         for (idx, row) in rows.iter().enumerate() {
+            let can_edit = resource.canEditRow(user, row);
+            let can_delete = resource.canDeleteRow(user, row);
             let mut row_tds = String::new();
 
             for col in &table_def.columns {
@@ -144,7 +144,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
     let prev_disabled = if current_page <= 1 { "opacity-30 pointer-events-none" } else { "" };
     let next_disabled = if current_page >= total_pages || total_pages == 0 { "opacity-30 pointer-events-none" } else { "" };
 
-    let create_btn_html = if resource.can_create(user) {
+    let create_btn_html = if resource.canCreate(user) {
         match resource.form_mode() {
             FormMode::Page => format!(
                 r#"<a href="/admin/{slug}/create" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
