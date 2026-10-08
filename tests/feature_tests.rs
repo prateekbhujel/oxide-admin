@@ -260,3 +260,92 @@ fn test_filament_policy_table_view_action_buttons() {
     assert!(html.contains("—")); // Fallback dash for disabled row actions
 }
 
+#[test]
+fn test_theme_and_brand_customization() {
+    let theme = ThemeConfig::new()
+        .brand_name("Acme Studio")
+        .primary_color(PrimaryColor::Violet)
+        .font_family(FontFamily::Inter);
+
+    assert_eq!(theme.brand_name, "Acme Studio");
+    assert_eq!(theme.primary_color.name(), "violet");
+    assert_eq!(theme.primary_color.hex(), "#8b5cf6");
+    assert_eq!(theme.font_family.font_family_css(), "'Inter', system-ui, -apple-system, sans-serif");
+    assert!(theme.font_family.css_url().contains("family=Inter"));
+
+    let user = User {
+        id: "1".into(),
+        name: "Admin".into(),
+        email: "admin@acme.com".into(),
+        role: Role::Superadmin,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+
+    let html = oxide_admin::view::layout::render_page(
+        "Products",
+        "products",
+        &[],
+        "<div>Content</div>",
+        "",
+        None,
+        &user,
+        &theme,
+    );
+
+    assert!(html.contains("<title>Products · Acme Studio</title>"));
+    assert!(html.contains("Acme Studio"));
+    assert!(html.contains("#8b5cf6"));
+    assert!(html.contains("family=Inter"));
+}
+
+#[test]
+fn test_job_queue_and_background_worker() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let queue = JobQueue::new();
+    let ran_flag = Arc::new(AtomicBool::new(false));
+    let ran_flag_clone = ran_flag.clone();
+
+    queue.dispatch_fn("send_slack_alert", move || {
+        ran_flag_clone.store(true, Ordering::SeqCst);
+        Ok(())
+    });
+
+    queue.dispatch_fn("generate_invoice_pdf", || {
+        Ok(())
+    });
+
+    assert_eq!(queue.stats().pending, 2);
+    assert_eq!(queue.stats().processed, 0);
+
+    let count = queue.work_all();
+    assert_eq!(count, 2);
+    assert_eq!(queue.stats().pending, 0);
+    assert_eq!(queue.stats().processed, 2);
+    assert_eq!(queue.stats().failed, 0);
+    assert!(ran_flag.load(Ordering::SeqCst));
+}
+
+#[test]
+fn test_transactional_mailer() {
+    let mailer = Mailer::new();
+    let msg = MailMessage::to("founder@startup.io")
+        .subject("Welcome to OxideAdmin")
+        .line("Your enterprise admin kit is ready.")
+        .action("Access Panel", "/admin");
+
+    assert_eq!(msg.to, "founder@startup.io");
+    assert_eq!(msg.subject, "Welcome to OxideAdmin");
+    assert_eq!(msg.lines.len(), 1);
+
+    msg.send_via(&mailer).unwrap();
+
+    let outbox = mailer.sent_messages();
+    assert_eq!(outbox.len(), 1);
+    assert_eq!(outbox[0].to, "founder@startup.io");
+    assert_eq!(outbox[0].subject, "Welcome to OxideAdmin");
+}
+
+

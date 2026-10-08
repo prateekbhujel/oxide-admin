@@ -1,4 +1,5 @@
 use crate::resource::DynResource;
+use crate::theme::ThemeConfig;
 
 pub fn render_page(
     title: &str,
@@ -8,10 +9,11 @@ pub fn render_page(
     dialogs_html: &str,
     flash_message: Option<&str>,
     user: &crate::domain::User,
+    theme: &ThemeConfig,
 ) -> String {
     let is_dash_active = current_slug == "dashboard" || current_slug.is_empty();
     let dash_classes = if is_dash_active {
-        "bg-zinc-800 text-zinc-100 font-medium"
+        "bg-zinc-800 text-zinc-100 font-medium border-l-2 border-[var(--primary)]"
     } else {
         "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60"
     };
@@ -30,7 +32,7 @@ pub fn render_page(
 
         let is_active = res.slug() == current_slug;
         let active_classes = if is_active {
-            "bg-zinc-800 text-zinc-100 font-medium"
+            "bg-zinc-800 text-zinc-100 font-medium border-l-2 border-[var(--primary)]"
         } else {
             "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60"
         };
@@ -66,15 +68,36 @@ pub fn render_page(
         String::new()
     };
 
+    let brand_name = &theme.brand_name;
+    let font_css_url = theme.font_family.css_url();
+    let font_family_css = theme.font_family.font_family_css();
+    let primary_hex = theme.primary_color.hex();
+    let primary_hover_hex = theme.primary_color.hover_hex();
+    let primary_light = theme.primary_color.light_bg();
+
+    let brand_logo_html = if let Some(ref custom_logo) = theme.brand_logo {
+        custom_logo.clone()
+    } else {
+        format!(
+            r#"<div class="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-[{primary_hex}]">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="{primary_hex}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+            </div>"#
+        )
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title} · OxideAdmin</title>
+    <title>{title} · {brand_name}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/style.css">
+    <link rel="stylesheet" href="{font_css_url}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-mono/style.css">
     <script>
         tailwind.config = {{
@@ -82,10 +105,14 @@ pub fn render_page(
             theme: {{
                 extend: {{
                     fontFamily: {{
-                        sans: ['"Geist Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+                        sans: [{font_family_css}],
                         mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
                     }},
                     colors: {{
+                        primary: {{
+                            500: '{primary_hex}',
+                            600: '{primary_hover_hex}',
+                        }},
                         zinc: {{
                             950: '#09090b',
                             900: '#121215',
@@ -104,7 +131,12 @@ pub fn render_page(
         }}
     </script>
     <style>
-        body {{ font-family: 'Geist Sans', system-ui, -apple-system, sans-serif; }}
+        :root {{
+            --primary: {primary_hex};
+            --primary-hover: {primary_hover_hex};
+            --primary-light: {primary_light};
+        }}
+        body {{ font-family: {font_family_css}; }}
         .loading-shimmer {{ opacity: 0.6; pointer-events: none; transition: opacity 0.15s ease; }}
         dialog::backdrop {{ background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); }}
         @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
@@ -117,14 +149,8 @@ pub fn render_page(
         <!-- Brand Header (Clean, zero marketing badges) -->
         <div class="h-14 flex items-center px-4 border-b border-zinc-800">
             <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center">
-                    <svg class="w-4 h-4 text-zinc-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                        <polyline points="2 17 12 22 22 17"></polyline>
-                        <polyline points="2 12 12 17 22 12"></polyline>
-                    </svg>
-                </div>
-                <span class="text-xs font-semibold tracking-tight text-zinc-100">OxideAdmin</span>
+                {brand_logo_html}
+                <span class="text-xs font-semibold tracking-tight text-zinc-100">{brand_name}</span>
             </div>
         </div>
 

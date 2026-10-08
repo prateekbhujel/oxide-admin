@@ -316,6 +316,76 @@ This allows OxideAdmin to power both server-rendered HTML admin panels and headl
 
 ---
 
+## 🎨 Brand & Theme Customization (Colors, Fonts & Logos)
+
+Customize your admin panel's aesthetic with type-safe brand options:
+
+```rust
+let admin = AdminPanel::new()
+    .brand_name("Acme Studio")
+    .brand_logo(r#"<svg ...></svg>"#)
+    .primary_color(PrimaryColor::Violet) // Emerald, Indigo, Violet, Amber, Rose, Cyan
+    .font_family(FontFamily::Inter);    // Geist, Inter, Outfit, PlusJakartaSans
+```
+
+- **Primary Palettes**: Automatically configures Tailwind CSS variables (`--primary`, `--primary-hover`, `--primary-light`) across buttons, left sidebar borders, indicators, and focus rings.
+- **Web Typography**: Automatically injects CDN web fonts for Geist Sans, Inter, Outfit, or Plus Jakarta Sans.
+- **Custom Logos**: Replace the default cube mark with your company SVG or brand logo.
+
+---
+
+## 🛠️ The `oxi` CLI Tool (Artisan-Grade Scaffolding)
+
+OxideAdmin ships with `oxi`, an Artisan-inspired command-line assistant:
+
+```bash
+# Scaffold a new Filament-style Resource with columns, form fields, and policy hooks
+cargo run --bin oxi -- make:resource Product
+
+# Scaffold a domain Model with camelCase Serde serialization
+cargo run --bin oxi -- make:model Customer
+
+# Scaffold a SQLite repository interface and implementation
+cargo run --bin oxi -- make:repo Product
+
+# List all registered admin routes and headless JSON API endpoints
+cargo run --bin oxi -- routes
+
+# Preview theme colors, palette hex values, and typography
+cargo run --bin oxi -- theme:preview
+```
+
+---
+
+## ⚡ Background Job Queues & Transactional Mail
+
+Like Laravel's `Queue` and `Mail`, OxideAdmin provides lightweight, thread-safe asynchronous primitives out of the box:
+
+### Background Jobs
+```rust
+let queue = admin.get_queue();
+
+// Dispatch closure jobs or custom Job structs
+queue.dispatch_fn("send_slack_webhook", || {
+    // Process async payload
+    Ok(())
+});
+
+// Process pending queue jobs
+let processed_count = queue.work_all();
+```
+
+### Transactional Mailer
+```rust
+MailMessage::to("customer@example.com")
+    .subject("Your Order ORD-1004 has Shipped")
+    .line("Your order has been dispatched via Express Delivery.")
+    .action("Track Order", "/admin/orders")
+    .send_via(&admin.get_mailer())?;
+```
+
+---
+
 ## 🔐 OAuth SSO & Role Switcher
 
 In addition to email/password authentication, OxideAdmin supports single-sign-on (SSO) integration with GitHub OAuth (`/admin/oauth/github`), as well as a one-click demo role switcher to test permission levels on the fly.

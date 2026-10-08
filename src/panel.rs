@@ -22,6 +22,9 @@ pub struct AdminPanel {
     resource_map: HashMap<String, DynResource>,
     user_repo: Option<Arc<dyn UserRepository>>,
     audit_repo: Option<Arc<dyn AuditRepository>>,
+    theme: crate::theme::ThemeConfig,
+    queue: Arc<crate::queue::JobQueue>,
+    mailer: Arc<crate::mail::Mailer>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +57,9 @@ impl AdminPanel {
             resource_map: HashMap::new(),
             user_repo: None,
             audit_repo: None,
+            theme: crate::theme::ThemeConfig::default(),
+            queue: Arc::new(crate::queue::JobQueue::new()),
+            mailer: Arc::new(crate::mail::Mailer::new()),
         }
     }
 
@@ -72,6 +78,53 @@ impl AdminPanel {
     pub fn audit(mut self, repo: Arc<dyn AuditRepository>) -> Self {
         self.audit_repo = Some(repo);
         self
+    }
+
+    pub fn theme(mut self, theme: crate::theme::ThemeConfig) -> Self {
+        self.theme = theme;
+        self
+    }
+
+    pub fn brand_name(mut self, name: impl Into<String>) -> Self {
+        self.theme.brand_name = name.into();
+        self
+    }
+
+    pub fn brand_logo(mut self, logo: impl Into<String>) -> Self {
+        self.theme.brand_logo = Some(logo.into());
+        self
+    }
+
+    pub fn primary_color(mut self, color: crate::theme::PrimaryColor) -> Self {
+        self.theme.primary_color = color;
+        self
+    }
+
+    pub fn font_family(mut self, font: crate::theme::FontFamily) -> Self {
+        self.theme.font_family = font;
+        self
+    }
+
+    pub fn queue(mut self, queue: Arc<crate::queue::JobQueue>) -> Self {
+        self.queue = queue;
+        self
+    }
+
+    pub fn mailer(mut self, mailer: Arc<crate::mail::Mailer>) -> Self {
+        self.mailer = mailer;
+        self
+    }
+
+    pub fn get_theme(&self) -> &crate::theme::ThemeConfig {
+        &self.theme
+    }
+
+    pub fn get_queue(&self) -> Arc<crate::queue::JobQueue> {
+        self.queue.clone()
+    }
+
+    pub fn get_mailer(&self) -> Arc<crate::mail::Mailer> {
+        self.mailer.clone()
     }
 
     pub fn into_router(self) -> Router {
@@ -328,6 +381,7 @@ async fn dashboard_page(panel: Arc<AdminPanel>, headers: HeaderMap) -> Response 
         "",
         None,
         &user,
+        &panel.theme,
     );
 
     Html(full_html).into_response()
@@ -357,6 +411,7 @@ async fn resource_create_page(
             "",
             None,
             &user,
+            &panel.theme,
         );
         return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
     }
@@ -371,6 +426,7 @@ async fn resource_create_page(
         "",
         None,
         &user,
+        &panel.theme,
     );
     Html(full_html).into_response()
 }
@@ -399,6 +455,7 @@ async fn resource_edit_page(
             "",
             None,
             &user,
+            &panel.theme,
         );
         return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
     }
@@ -415,6 +472,7 @@ async fn resource_edit_page(
                 "",
                 None,
                 &user,
+                &panel.theme,
             );
             return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
         }
@@ -431,6 +489,7 @@ async fn resource_edit_page(
         "",
         None,
         &user,
+        &panel.theme,
     );
     Html(full_html).into_response()
 }
@@ -460,6 +519,7 @@ async fn resource_page(
             "",
             None,
             &user,
+            &panel.theme,
         );
         return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
     }
@@ -478,6 +538,7 @@ async fn resource_page(
         &dialogs_html,
         flash.as_deref(),
         &user,
+        &panel.theme,
     );
 
     Html(full_html).into_response()

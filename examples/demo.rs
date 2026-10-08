@@ -339,8 +339,11 @@ async fn main() {
     let order_resource = OrderResource::new(order_repo);
     let audit_resource = AuditLogResource::new(audit_repo.clone());
 
-    // 3. Register into AdminPanel with RBAC user store & audit logger
+    // 3. Register into AdminPanel with RBAC user store, audit logger & theme customization
     let admin = AdminPanel::new()
+        .brand_name("Oxide Studio")
+        .primary_color(PrimaryColor::Emerald)
+        .font_family(FontFamily::Geist)
         .users(user_repo)
         .audit(audit_repo)
         .register(user_resource)
