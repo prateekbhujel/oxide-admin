@@ -28,8 +28,14 @@ pub struct AdminPanel {
 pub struct TableQuery {
     pub page: Option<usize>,
     pub search: Option<String>,
+    #[serde(alias = "sort_by")]
     pub sort_by: Option<String>,
+    #[serde(alias = "sortBy")]
+    pub sort_by_camel: Option<String>,
+    #[serde(alias = "sort_desc")]
     pub sort_desc: Option<String>,
+    #[serde(alias = "sortDesc")]
+    pub sort_desc_camel: Option<String>,
     pub flash: Option<String>,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
@@ -93,6 +99,10 @@ impl AdminPanel {
             .route("/:slug/table", get({
                 let panel = shared_panel.clone();
                 move |headers, path, query| resource_table_partial(panel, headers, path, query)
+            }))
+            .route("/:slug/api", get({
+                let panel = shared_panel.clone();
+                move |headers, path, query| resource_json_api(panel, headers, path, query)
             }))
             .route("/:slug/create", get({
                 let panel = shared_panel.clone();
@@ -614,6 +624,48 @@ async fn resource_delete(
     }
 }
 
+async fn resource_json_api(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    Query(query_params): Query<TableQuery>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({ "error": "Unauthorized" }))).into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, axum::Json(serde_json::json!({ "error": "Not Found" }))).into_response();
+    };
+
+    if !res.can_view(&user) {
+        return (StatusCode::FORBIDDEN, axum::Json(serde_json::json!({ "error": "Forbidden" }))).into_response();
+    }
+
+    let query_state = parse_query(query_params);
+    let (rows, total) = res.fetch_rows(&query_state);
+
+    let json_rows: Vec<serde_json::Value> = rows.into_iter().map(|r| {
+        let mut map = serde_json::Map::new();
+        map.insert("id".to_string(), serde_json::Value::String(r.id));
+        for (k, v) in r.values {
+            let camel_k = crate::resource::to_camel_case(&k);
+            map.insert(camel_k, serde_json::Value::String(v));
+        }
+        serde_json::Value::Object(map)
+    }).collect();
+
+    (StatusCode::OK, axum::Json(serde_json::json!({
+        "data": json_rows,
+        "total": total,
+        "page": query_state.page,
+        "perPage": query_state.per_page,
+        "sortBy": query_state.sort_by,
+        "sortDesc": query_state.sort_desc,
+    }))).into_response()
+}
+
 fn parse_query(q: TableQuery) -> QueryState {
     let mut filters = HashMap::new();
     for (k, v) in q.extra {
@@ -621,19 +673,29 @@ fn parse_query(q: TableQuery) -> QueryState {
             if !v.is_empty() {
                 filters.insert(filter_name.to_string(), v);
             }
-        } else if !k.is_empty() && k != "page" && k != "search" && k != "sort_by" && k != "sort_desc" && k != "flash" {
+        } else if let Some(rest) = k.strip_prefix("filter") {
+            if !rest.is_empty() && rest.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                let name = rest.to_lowercase();
+                if !v.is_empty() {
+                    filters.insert(name, v);
+                }
+            }
+        } else if !k.is_empty() && k != "page" && k != "search" && k != "sort_by" && k != "sortBy" && k != "sort_desc" && k != "sortDesc" && k != "flash" {
             if !v.is_empty() {
                 filters.insert(k, v);
             }
         }
     }
 
+    let sort_col = q.sort_by_camel.or(q.sort_by).filter(|s| !s.is_empty());
+    let sort_desc_val = q.sort_desc_camel.or(q.sort_desc).map(|v| v == "true").unwrap_or(false);
+
     QueryState {
         page: q.page.unwrap_or(1),
         per_page: 8,
         search: q.search.unwrap_or_default().trim().to_string(),
-        sort_by: q.sort_by.filter(|s| !s.is_empty()),
-        sort_desc: q.sort_desc.map(|v| v == "true").unwrap_or(false),
+        sort_by: sort_col,
+        sort_desc: sort_desc_val,
         filters,
     }
 }

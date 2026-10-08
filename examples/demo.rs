@@ -65,15 +65,15 @@ impl Resource for UserResource {
                 ("Pending", "amber"),
                 ("Suspended", "rose"),
             ]))
-            .column(Column::text("created_at").label("Joined Date").sortable())
-            .page_size(8)
+            .column(Column::text("createdAt").label("Joined Date").sortable())
+            .pageSize(8)
     }
 
     fn form(&self) -> Form {
         Form::new()
             .field(FormField::text("name").required().placeholder("Full Name"))
             .field(FormField::email("email").required().placeholder("user@example.com"))
-            .field(FormField::searchable_select("role", vec![
+            .field(FormField::searchableSelect("role", vec![
                 ("Member", "Member (Standard Team Account)"),
                 ("Editor", "Editor (Orders & Content Management)"),
                 ("Admin", "Admin (Team Management)"),
@@ -108,7 +108,7 @@ impl Resource for UserResource {
                     .insert("email", &u.email)
                     .insert("role", u.role.as_str())
                     .insert("status", u.status.as_str())
-                    .insert("created_at", &u.created_at)
+                    .insert("createdAt", &u.created_at)
             })
             .collect();
         (rows, total_count)

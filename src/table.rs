@@ -21,7 +21,7 @@ impl Column {
     pub fn text(name: impl Into<String>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             column_type: ColumnType::Text,
             sortable: false,
@@ -32,7 +32,7 @@ impl Column {
     pub fn badge(name: impl Into<String>, colors: Vec<(&str, &str)>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             column_type: ColumnType::Badge {
                 color_map: colors.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
@@ -175,18 +175,22 @@ impl Table {
         self.default_page_size = size;
         self
     }
+
+    // Laravel-style camelCase aliases
+    #[allow(non_snake_case)]
+    pub fn pageSize(self, size: usize) -> Self {
+        self.page_size(size)
+    }
+
+    #[allow(non_snake_case)]
+    pub fn defaultSortBy(mut self, sort_by: impl Into<String>) -> Self {
+        self.default_sort_by = Some(sort_by.into());
+        self
+    }
 }
 
 impl Default for Table {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
 }

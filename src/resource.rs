@@ -21,7 +21,79 @@ pub struct QueryState {
     pub filters: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone)]
+pub fn to_camel_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut capitalize_next = false;
+    for c in s.chars() {
+        if c == '_' || c == '-' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.extend(c.to_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+pub fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 4);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.extend(c.to_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+pub fn headline(s: &str) -> String {
+    if s.eq_ignore_ascii_case("id") {
+        return "ID".to_string();
+    }
+    let mut words = Vec::new();
+    let mut current_word = String::new();
+
+    for c in s.chars() {
+        if c == '_' || c == '-' || c == ' ' {
+            if !current_word.is_empty() {
+                words.push(current_word);
+                current_word = String::new();
+            }
+        } else if c.is_uppercase() {
+            if !current_word.is_empty() {
+                words.push(current_word);
+                current_word = String::new();
+            }
+            current_word.push(c);
+        } else {
+            current_word.push(c);
+        }
+    }
+    if !current_word.is_empty() {
+        words.push(current_word);
+    }
+
+    words
+        .into_iter()
+        .map(|w| {
+            let mut chars = w.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str().to_lowercase().as_str(),
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RowData {
     pub id: String,
     pub values: HashMap<String, String>,
@@ -40,11 +112,22 @@ impl RowData {
         self
     }
 
+    /// Flexible getter: checks the exact key first, then transparently checks
+    /// its camelCase and snake_case equivalents (e.g. `createdAt` <-> `created_at`).
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.values.get(key).map(|s| s.as_str())
+        if let Some(v) = self.values.get(key) {
+            return Some(v.as_str());
+        }
+        let camel = to_camel_case(key);
+        if let Some(v) = self.values.get(&camel) {
+            return Some(v.as_str());
+        }
+        let snake = to_snake_case(key);
+        self.values.get(&snake).map(|s| s.as_str())
     }
 }
 
+#[allow(non_snake_case)]
 pub trait Resource: Send + Sync {
     fn name(&self) -> &str;
     fn plural_name(&self) -> &str;
@@ -97,6 +180,53 @@ pub trait Resource: Send + Sync {
     fn can_delete(&self, user: &crate::domain::User) -> bool {
         user.can(&format!("{}.delete", self.slug()))
     }
+
+    // =====================================================================
+    // Laravel-style camelCase DX Aliases
+    // =====================================================================
+    fn pluralName(&self) -> &str {
+        self.plural_name()
+    }
+
+    fn formMode(&self) -> FormMode {
+        self.form_mode()
+    }
+
+    fn fetchRows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
+        self.fetch_rows(query)
+    }
+
+    fn getRow(&self, id: &str) -> Option<RowData> {
+        self.get_row(id)
+    }
+
+    fn createRow(&self, values: HashMap<String, String>) -> Result<String, String> {
+        self.create_row(values)
+    }
+
+    fn updateRow(&self, id: &str, values: HashMap<String, String>) -> Result<(), String> {
+        self.update_row(id, values)
+    }
+
+    fn deleteRow(&self, id: &str) -> Result<(), String> {
+        self.delete_row(id)
+    }
+
+    fn canView(&self, user: &crate::domain::User) -> bool {
+        self.can_view(user)
+    }
+
+    fn canCreate(&self, user: &crate::domain::User) -> bool {
+        self.can_create(user)
+    }
+
+    fn canEdit(&self, user: &crate::domain::User) -> bool {
+        self.can_edit(user)
+    }
+
+    fn canDelete(&self, user: &crate::domain::User) -> bool {
+        self.can_delete(user)
+    }
 }
 
 pub type DynResource = Arc<dyn Resource>;
@@ -132,7 +262,7 @@ impl Resource for AuditLogResource {
     fn table(&self) -> Table {
         Table::new()
             .column(crate::table::Column::text("timestamp").label("Timestamp").sortable())
-            .column(crate::table::Column::text("user_name").label("Operator").searchable().sortable())
+            .column(crate::table::Column::text("userName").label("Operator").searchable().sortable())
             .column(crate::table::Column::badge("action", vec![
                 ("CREATE", "emerald"),
                 ("UPDATE", "blue"),
@@ -142,9 +272,9 @@ impl Resource for AuditLogResource {
                 ("users", "amber"),
                 ("orders", "indigo"),
             ]))
-            .column(crate::table::Column::text("record_id").label("Target ID").searchable())
+            .column(crate::table::Column::text("recordId").label("Target ID").searchable())
             .column(crate::table::Column::text("details").label("Change Summary").searchable())
-            .page_size(8)
+            .pageSize(8)
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
@@ -155,10 +285,10 @@ impl Resource for AuditLogResource {
                 RowData::new(&l.id)
                     .insert("id", &l.id)
                     .insert("timestamp", &l.timestamp)
-                    .insert("user_name", &l.user_name)
+                    .insert("userName", &l.user_name)
                     .insert("action", &l.action)
                     .insert("resource", &l.resource)
-                    .insert("record_id", &l.record_id)
+                    .insert("recordId", &l.record_id)
                     .insert("details", &l.details)
             })
             .collect();

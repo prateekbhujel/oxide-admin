@@ -80,7 +80,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
             let mut row_tds = String::new();
 
             for col in &table_def.columns {
-                let raw_val = row.values.get(&col.name).map(|s| s.as_str()).unwrap_or("—");
+                let raw_val = row.get(&col.name).unwrap_or("—");
                 let rendered_cell = render_cell(col, raw_val);
                 row_tds.push_str(&format!(r#"<td class="{cell_padding} whitespace-nowrap text-xs text-zinc-200">{rendered_cell}</td>"#));
             }
@@ -270,7 +270,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
 fn render_cell(col: &Column, val: &str) -> String {
     match &col.column_type {
         ColumnType::Text | ColumnType::Numeric => {
-            if col.name == "id" || col.name == "email" || col.name == "amount" || col.name == "record_id" {
+            if col.name == "id" || col.name == "email" || col.name == "amount" || col.name == "record_id" || col.name == "recordId" {
                 format!(r#"<span class="font-mono text-zinc-300">{val}</span>"#)
             } else {
                 format!(r#"<span class="font-medium text-zinc-100">{val}</span>"#)

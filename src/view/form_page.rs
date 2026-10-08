@@ -67,7 +67,14 @@ fn render_page_fields(form: &Form, values: Option<&HashMap<String, String>>) -> 
         let input_id = format!("page-field-{}", f.name);
         let placeholder = f.placeholder.as_deref().unwrap_or("");
         let required = if f.required { "required" } else { "" };
-        let current_val = values.and_then(|v| v.get(&f.name)).map(|s| s.as_str()).unwrap_or("");
+        let current_val = values
+            .and_then(|v| {
+                v.get(&f.name)
+                    .or_else(|| v.get(&crate::resource::to_camel_case(&f.name)))
+                    .or_else(|| v.get(&crate::resource::to_snake_case(&f.name)))
+            })
+            .map(|s| s.as_str())
+            .unwrap_or("");
 
         let field_input = match &f.field_type {
             FieldType::Select { options } => {

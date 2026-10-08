@@ -250,6 +250,52 @@ Form::new()
     ]))
 ```
 
+## 🐪 Laravel-Grade Developer Experience: camelCase Everywhere
+
+Inspired by Laravel and Inertia, OxideAdmin supports first-class `camelCase` across every layer:
+
+- **Bidirectional Key Resolution**: `RowData::get("createdAt")` and `RowData::get("created_at")` both work transparently, so you never get bitten by casing mismatches.
+- **Auto-Headline Labels**: Defining `Column::text("createdAt")` automatically renders `"Created At"` as the table header label without manual configuration.
+- **camelCase Query Parameters**: URL parameters use modern web standards (`?sortBy=name&sortDesc=true&filterRole=Admin`). Legacy `sort_by` and `filter_role` remain fully supported.
+- **Fluent camelCase Aliases**: Use Laravel-style camelCase methods on builders:
+  ```rust
+  Table::new().pageSize(10).defaultSortBy("createdAt")
+  FormField::searchableSelect("role", options)
+  ```
+
+---
+
+## ⚡ Headless REST JSON API (`/admin/:slug/api`)
+
+Every resource automatically serves a clean, paginated `camelCase` JSON API:
+
+```bash
+curl -H "Cookie: oxide_session=..." \
+  "http://127.0.0.1:3000/admin/users/api?sortBy=name&sortDesc=true&filterRole=Superadmin"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "2",
+      "name": "Pratik Bhujel",
+      "email": "pratik.bhujel@oxideadmin.dev",
+      "role": "Superadmin",
+      "status": "Active",
+      "createdAt": "2026-09-02"
+    }
+  ],
+  "page": 1,
+  "perPage": 8,
+  "sortBy": "name",
+  "sortDesc": true,
+  "total": 1
+}
+```
+
+This allows OxideAdmin to power both server-rendered HTML admin panels and headless frontends (Inertia.js, React, Vue, Svelte, or mobile apps) from the same Rust codebase.
+
 ---
 
 ## 🔐 OAuth SSO & Role Switcher
@@ -288,6 +334,8 @@ Demo accounts (password for all: `admin123`):
 - [x] Permission-driven UI rendering with 403 Forbidden security guards
 - [x] Activity audit trail logging with SQLite persistence (`AuditLogResource`)
 - [x] GitHub OAuth SSO integration
+- [x] Laravel-grade camelCase DX (bidirectional key resolution, auto-headline)
+- [x] Headless REST JSON API endpoint (`/:slug/api`) for Inertia & SPAs
 - [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
 - [ ] PostgreSQL and SeaORM repository adapters
 - [ ] Bulk actions and CSV export queue

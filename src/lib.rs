@@ -16,6 +16,9 @@ pub mod prelude {
         OrderRepository, SqliteAuditRepository, SqliteOrderRepository, SqliteUserRepository,
         UserRepository,
     };
-    pub use crate::resource::{AuditLogResource, FormMode, QueryState, Resource, RowData};
+    pub use crate::resource::{
+        headline, to_camel_case, to_snake_case, AuditLogResource, FormMode, QueryState, Resource,
+        RowData,
+    };
     pub use crate::table::{Column, Table, TableAction, TableFilter, TableStyle};
 }

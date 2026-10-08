@@ -25,7 +25,7 @@ impl FormField {
     pub fn text(name: impl Into<String>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             field_type: FieldType::Text,
             required: false,
@@ -36,7 +36,7 @@ impl FormField {
     pub fn email(name: impl Into<String>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             field_type: FieldType::Email,
             required: false,
@@ -47,7 +47,7 @@ impl FormField {
     pub fn select(name: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             field_type: FieldType::Select {
                 options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
@@ -60,7 +60,7 @@ impl FormField {
     pub fn searchable_select(name: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
         let name = name.into();
         Self {
-            label: capitalize(&name),
+            label: crate::resource::headline(&name),
             name,
             field_type: FieldType::SearchableSelect {
                 options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
@@ -68,6 +68,12 @@ impl FormField {
             required: false,
             placeholder: None,
         }
+    }
+
+    // Laravel-style camelCase alias
+    #[allow(non_snake_case)]
+    pub fn searchableSelect(name: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
+        Self::searchable_select(name, options)
     }
 
     pub fn required(mut self) -> Self {
@@ -94,13 +100,5 @@ impl Form {
     pub fn field(mut self, field: FormField) -> Self {
         self.fields.push(field);
         self
-    }
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
 }

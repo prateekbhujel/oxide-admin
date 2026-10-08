@@ -223,7 +223,20 @@ pub fn render_page(
         function onSortClick(slug, column, currentSort, currentDesc) {{
             const isSame = currentSort === column;
             const newDesc = isSame ? (currentDesc === 'true' ? 'false' : 'true') : 'false';
-            updateTable(slug, {{ sort_by: column, sort_desc: newDesc }});
+            updateTable(slug, {{ sortBy: column, sortDesc: newDesc }});
+        }}
+
+        function onFilterChange(slug, name, val) {{
+            const url = new URL(window.location.href);
+            const paramName = 'filter' + name.charAt(0).toUpperCase() + name.slice(1);
+            if (val) {{
+                url.searchParams.set(paramName, val);
+            }} else {{
+                url.searchParams.delete(paramName);
+                url.searchParams.delete('filter_' + name);
+            }}
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
         }}
 
         function onPageClick(slug, page) {{
@@ -242,7 +255,15 @@ pub fn render_page(
             if (form) form.action = '/admin/' + slug + '/edit/' + id;
 
             for (const [key, val] of Object.entries(values)) {{
-                const input = document.getElementById('edit-field-' + key);
+                let input = document.getElementById('edit-field-' + key);
+                if (!input) {{
+                    const camelKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase());
+                    input = document.getElementById('edit-field-' + camelKey);
+                }}
+                if (!input) {{
+                    const snakeKey = key.replace(/[A-Z]/g, letter => `_${{letter.toLowerCase()}}`);
+                    input = document.getElementById('edit-field-' + snakeKey);
+                }}
                 if (input) input.value = val;
             }}
 

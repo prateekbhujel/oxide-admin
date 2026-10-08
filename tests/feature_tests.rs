@@ -88,3 +88,72 @@ fn test_query_state_with_filters() {
     assert_eq!(query.filters.get("role").unwrap(), "Superadmin");
     assert_eq!(query.filters.get("status").unwrap(), "Active");
 }
+
+#[test]
+fn test_camel_case_and_headline_utilities() {
+    assert_eq!(to_camel_case("created_at"), "createdAt");
+    assert_eq!(to_camel_case("order_number"), "orderNumber");
+    assert_eq!(to_snake_case("createdAt"), "created_at");
+    assert_eq!(to_snake_case("orderNumber"), "order_number");
+
+    assert_eq!(headline("createdAt"), "Created At");
+    assert_eq!(headline("created_at"), "Created At");
+    assert_eq!(headline("userName"), "User Name");
+    assert_eq!(headline("user_name"), "User Name");
+    assert_eq!(headline("id"), "ID");
+}
+
+#[test]
+fn test_row_data_bidirectional_case_fallback() {
+    let row1 = RowData::new("1").insert("createdAt", "2026-10-08");
+    assert_eq!(row1.get("createdAt"), Some("2026-10-08"));
+    assert_eq!(row1.get("created_at"), Some("2026-10-08"));
+
+    let row2 = RowData::new("2").insert("user_name", "Pratik Bhujel");
+    assert_eq!(row2.get("userName"), Some("Pratik Bhujel"));
+    assert_eq!(row2.get("user_name"), Some("Pratik Bhujel"));
+}
+
+#[test]
+fn test_laravel_dx_camel_case_methods() {
+    let page_res = TestPageResource;
+    assert_eq!(page_res.pluralName(), "Articles");
+    assert_eq!(page_res.formMode(), FormMode::Page);
+
+    let table = Table::new().pageSize(25).defaultSortBy("createdAt");
+    assert_eq!(table.default_page_size, 25);
+    assert_eq!(table.default_sort_by, Some("createdAt".to_string()));
+
+    let field = FormField::searchableSelect("role", vec![("admin", "Admin")]);
+    assert_eq!(field.name, "role");
+}
+
+#[test]
+fn test_domain_json_camel_case_serialization() {
+    let user = User {
+        id: "1".into(),
+        name: "Pratik Bhujel".into(),
+        email: "pratik@example.com".into(),
+        role: Role::Superadmin,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+
+    let user_json = serde_json::to_string(&user).unwrap();
+    assert!(user_json.contains("\"createdAt\":\"2026-10-08\""));
+    assert!(!user_json.contains("\"created_at\""));
+
+    let log = AuditLog {
+        id: "1".into(),
+        user_name: "Pratik".into(),
+        action: "CREATE".into(),
+        resource: "users".into(),
+        record_id: "2".into(),
+        details: "Created record".into(),
+        timestamp: "2026-10-08 12:00:00".into(),
+    };
+
+    let log_json = serde_json::to_string(&log).unwrap();
+    assert!(log_json.contains("\"userName\":\"Pratik\""));
+    assert!(log_json.contains("\"recordId\":\"2\""));
+}
