@@ -348,4 +348,66 @@ fn test_transactional_mailer() {
     assert_eq!(outbox[0].subject, "Welcome to OxideAdmin");
 }
 
+#[test]
+fn test_eloquent_query_builder_sql_and_bindings() {
+    let query = Query::table("orders")
+        .select(vec!["id", "customer", "amount", "status"])
+        .where_eq("status", "Paid")
+        .where_gt("amount", "100")
+        .order_by("created_at", "DESC")
+        .paginate(1, 10);
+
+    let (sql, bindings) = query.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT id, customer, amount, status FROM orders WHERE status = ? AND amount > ? ORDER BY created_at DESC LIMIT 10 OFFSET 0"
+    );
+    assert_eq!(bindings, vec!["Paid", "100"]);
+
+    // Test camelCase aliases
+    let query_camel = Query::table("users")
+        .whereEq("role", "admin")
+        .whereLike("email", "%@company.com")
+        .orderBy("id", "ASC")
+        .limit(5);
+
+    let (sql_camel, bindings_camel) = query_camel.toSql();
+    assert_eq!(
+        sql_camel,
+        "SELECT * FROM users WHERE role = ? AND email LIKE ? ORDER BY id ASC LIMIT 5"
+    );
+    assert_eq!(bindings_camel, vec!["admin", "%@company.com"]);
+}
+
+#[test]
+fn test_cache_remember_and_ttl_expiration() {
+    let cache = MemoryCache::new();
+
+    // Cache miss followed by remember
+    let val1 = cache.remember("stats:daily_sales", 300, || {
+        "42000".to_string()
+    });
+    assert_eq!(val1, "42000");
+
+    // Cache hit: callback not invoked
+    let val2 = cache.remember("stats:daily_sales", 300, || {
+        "99999".to_string()
+    });
+    assert_eq!(val2, "42000");
+
+    // Direct get
+    assert_eq!(cache.get("stats:daily_sales"), Some("42000".to_string()));
+
+    // Forget
+    assert!(cache.forget("stats:daily_sales"));
+    assert_eq!(cache.get("stats:daily_sales"), None);
+
+    // Flush
+    cache.put("key1", "val1", None);
+    cache.put("key2", "val2", None);
+    cache.flush();
+    assert_eq!(cache.get("key1"), None);
+    assert_eq!(cache.get("key2"), None);
+}
+
 

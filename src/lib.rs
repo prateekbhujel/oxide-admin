@@ -1,8 +1,10 @@
 pub mod auth;
+pub mod cache;
 pub mod domain;
 pub mod form;
 pub mod mail;
 pub mod panel;
+pub mod query;
 pub mod queue;
 pub mod repository;
 pub mod resource;
@@ -11,10 +13,12 @@ pub mod theme;
 pub mod view;
 
 pub mod prelude {
+    pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
     pub use crate::domain::{AuditLog, Order, OrderStatus, Role, User, UserStatus};
     pub use crate::form::{Form, FormField};
     pub use crate::mail::{MailMessage, Mailer};
     pub use crate::panel::AdminPanel;
+    pub use crate::query::{OrderDir, Query, WhereClause};
     pub use crate::queue::{Job, JobQueue, QueueStats};
     pub use crate::repository::{
         AuditRepository, InMemoryAuditRepository, InMemoryOrderRepository, InMemoryUserRepository,
@@ -28,4 +32,5 @@ pub mod prelude {
     pub use crate::table::{Column, Table, TableAction, TableFilter, TableStyle};
     pub use crate::theme::{FontFamily, PrimaryColor, ThemeConfig};
 }
+
 

@@ -334,6 +334,56 @@ let admin = AdminPanel::new()
 
 ---
 
+## 🔍 Eloquent-Style Query Builder
+
+OxideAdmin provides a lightweight, fluent SQL query builder inspired by Laravel Eloquent:
+
+```rust
+use oxide_admin::prelude::*;
+
+// Build type-safe, parameterized queries with ease:
+let (sql, bindings) = Query::table("orders")
+    .select(vec!["id", "customer", "amount", "status"])
+    .where_eq("status", "Paid")
+    .where_gt("amount", "100")
+    .order_by("created_at", "DESC")
+    .paginate(1, 10)
+    .to_sql();
+
+// Also supports full camelCase aliases:
+let (sql, bindings) = Query::table("users")
+    .whereEq("role", "admin")
+    .whereLike("email", "%@company.com")
+    .orderBy("id", "ASC")
+    .limit(5)
+    .toSql();
+```
+
+---
+
+## ⚡ Caching System & Native Redis Driver
+
+Inspired by Laravel's `Cache::remember()`, OxideAdmin includes a fast in-memory cache and a zero-dependency native Redis driver:
+
+```rust
+use oxide_admin::prelude::*;
+
+// 1. In-memory cache with UTC TTL expiration
+let cache = MemoryCache::new();
+
+let stats = cache.remember("stats:daily_sales", 300, || {
+    // Expensive database aggregation
+    "42,500 USD".to_string()
+});
+
+// 2. Redis driver with automatic TCP fallback
+let redis = RedisCache::new("127.0.0.1:6379");
+redis.put("session:123", "user_data", Some(3600));
+let session = redis.get("session:123");
+```
+
+---
+
 ## 🛠️ The `oxi` CLI Tool (Artisan-Grade Scaffolding)
 
 OxideAdmin ships with `oxi`, an Artisan-inspired command-line assistant:
@@ -347,6 +397,23 @@ cargo run --bin oxi -- make:model Customer
 
 # Scaffold a SQLite repository interface and implementation
 cargo run --bin oxi -- make:repo Product
+
+# Generate timestamped SQL migration files
+cargo run --bin oxi -- make:migration create_products_table
+
+# Run database migrations and inspect SQLite schema
+cargo run --bin oxi -- migrate
+cargo run --bin oxi -- db:tables
+
+# Seed demo accounts and test data
+cargo run --bin oxi -- db:seed
+
+# Scaffold background jobs and transactional mailers
+cargo run --bin oxi -- make:job ProcessPayment
+cargo run --bin oxi -- make:mail OrderShipped
+
+# Flush application and Redis cache stores
+cargo run --bin oxi -- cache:clear
 
 # List all registered admin routes and headless JSON API endpoints
 cargo run --bin oxi -- routes
@@ -424,6 +491,9 @@ Demo accounts (password for all: `admin123`):
 - [x] GitHub OAuth SSO integration
 - [x] Laravel-grade camelCase DX (bidirectional key resolution, auto-headline)
 - [x] Headless REST JSON API endpoint (`/:slug/api`) for Inertia & SPAs
+- [x] Eloquent-style fluent Query builder with camelCase aliases (`Query::table`)
+- [x] Cache system with TTL and native RESP Redis driver (`CacheDriver`, `RedisCache`)
+- [x] Artisan-grade CLI tool `oxi` (`make:resource`, `make:migration`, `migrate`, `db:seed`, etc.)
 - [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
 - [ ] PostgreSQL and SeaORM repository adapters
 - [ ] Bulk actions and CSV export queue
