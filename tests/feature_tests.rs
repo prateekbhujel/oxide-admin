@@ -410,4 +410,85 @@ fn test_cache_remember_and_ttl_expiration() {
     assert_eq!(cache.get("key2"), None);
 }
 
+#[test]
+fn test_pest_style_fluent_expectations() {
+    use oxide_admin::prelude::*;
+
+    pest_test("it validates user properties with Pest syntax", || {
+        let user = User {
+            id: "u_42".to_string(),
+            name: "Taylor".to_string(),
+            email: "taylor@laravel.com".to_string(),
+            role: Role::Superadmin,
+            status: UserStatus::Active,
+            created_at: "2026-10-08".to_string(),
+        };
+
+        // Pest-style chainable assertions
+        expect(&user.name).to_be("Taylor")
+            .and(&user.email).to_contain("@laravel.com")
+            .and(&user.role).to_be(&Role::Superadmin)
+            .and(user.status.is_active()).to_be_true();
+
+        // Comparison and collections
+        expect(100).to_be_greater_than(50);
+        expect(25).to_be_less_than(50);
+        expect("").to_be_empty();
+        expect("non-empty").to_not_be_empty();
+
+        // Options and Results
+        let some_val: Option<i32> = Some(42);
+        let none_val: Option<i32> = None;
+        expect(some_val).to_be_some();
+        expect(none_val).to_be_none();
+
+        let ok_val: Result<&str, &str> = Ok("success");
+        let err_val: Result<&str, &str> = Err("failure");
+        expect(ok_val).to_be_ok();
+        expect(err_val).to_be_err();
+    });
+}
+
+#[test]
+fn test_debug_dump_macro() {
+    use oxide_admin::dump;
+    let data = vec!["oxide", "admin", "fast"];
+    // Verify dump! macro executes smoothly without errors
+    dump!(data);
+}
+
+#[tokio::test]
+async fn test_websocket_broadcaster_pubsub() {
+    use oxide_admin::prelude::*;
+
+    let broadcaster = Broadcaster::new(16);
+    assert_eq!(broadcaster.subscriber_count(), 0);
+
+    // Subscribe client 1 & 2
+    let mut rx1 = broadcaster.subscribe();
+    let mut rx2 = broadcaster.subscribe();
+    assert_eq!(broadcaster.subscriber_count(), 2);
+
+    // Broadcast event
+    let payload = serde_json::json!({
+        "order_id": "ORD-999",
+        "amount": 450,
+        "status": "Paid"
+    });
+    let receiver_count = broadcaster.broadcast("orders", "order:created", payload.clone());
+    assert_eq!(receiver_count, 2);
+
+    // Both clients receive identical event
+    let msg1 = rx1.recv().await.unwrap();
+    let msg2 = rx2.recv().await.unwrap();
+
+    expect(&msg1.channel).to_be("orders");
+    expect(&msg1.event).to_be("order:created");
+    expect(msg1.data["order_id"].as_str().unwrap()).to_be("ORD-999");
+
+    expect(&msg2.channel).to_be("orders");
+    expect(&msg2.event).to_be("order:created");
+    expect(msg2.data["amount"].as_i64().unwrap()).to_be(450);
+}
+
 

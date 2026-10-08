@@ -11,7 +11,7 @@ keywords = ["admin", "crud", "axum", "filament", "fullstack"]
 categories = ["web-programming::http-server"]
 
 [dependencies]
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

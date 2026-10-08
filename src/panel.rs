@@ -25,6 +25,7 @@ pub struct AdminPanel {
     theme: crate::theme::ThemeConfig,
     queue: Arc<crate::queue::JobQueue>,
     mailer: Arc<crate::mail::Mailer>,
+    broadcaster: Arc<crate::ws::Broadcaster>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +61,7 @@ impl AdminPanel {
             theme: crate::theme::ThemeConfig::default(),
             queue: Arc::new(crate::queue::JobQueue::new()),
             mailer: Arc::new(crate::mail::Mailer::new()),
+            broadcaster: Arc::new(crate::ws::Broadcaster::default()),
         }
     }
 
@@ -127,10 +129,28 @@ impl AdminPanel {
         self.mailer.clone()
     }
 
+    pub fn broadcaster(mut self, broadcaster: Arc<crate::ws::Broadcaster>) -> Self {
+        self.broadcaster = broadcaster;
+        self
+    }
+
+    pub fn get_broadcaster(&self) -> Arc<crate::ws::Broadcaster> {
+        self.broadcaster.clone()
+    }
+
+    /// Broadcast an event across all WebSocket clients (Laravel `broadcast(new Event())`)
+    pub fn broadcast(&self, channel: &str, event: &str, data: serde_json::Value) -> usize {
+        self.broadcaster.broadcast(channel, event, data)
+    }
+
     pub fn into_router(self) -> Router {
         let shared_panel = Arc::new(self);
 
         Router::new()
+            .route("/ws", get({
+                let broadcaster = shared_panel.get_broadcaster();
+                move |ws| crate::ws::ws_handler(ws, broadcaster)
+            }))
             .route("/login", get(login_page).post({
                 let panel = shared_panel.clone();
                 move |form| login_submit(panel, form)
@@ -602,6 +622,8 @@ async fn resource_create(
                     timestamp: now,
                 });
             }
+            panel.broadcast("admin", "record:created", serde_json::json!({ "slug": &slug, "id": &new_id }));
+            panel.broadcast(&slug, "created", serde_json::json!({ "id": &new_id }));
             Redirect::to(&format!("/admin/{slug}?flash=Record+created+successfully")).into_response()
         }
         Err(err) => {
@@ -649,6 +671,8 @@ async fn resource_update(
                     timestamp: now,
                 });
             }
+            panel.broadcast("admin", "record:updated", serde_json::json!({ "slug": &slug, "id": &id }));
+            panel.broadcast(&slug, "updated", serde_json::json!({ "id": &id }));
             Redirect::to(&format!("/admin/{slug}?flash=Record+updated+successfully")).into_response()
         }
         Err(err) => {
@@ -695,6 +719,8 @@ async fn resource_delete(
                     timestamp: now,
                 });
             }
+            panel.broadcast("admin", "record:deleted", serde_json::json!({ "slug": &slug, "id": &id }));
+            panel.broadcast(&slug, "deleted", serde_json::json!({ "id": &id }));
             Redirect::to(&format!("/admin/{slug}?flash=Record+deleted+successfully")).into_response()
         }
         Err(err) => {

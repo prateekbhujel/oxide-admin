@@ -310,6 +310,29 @@ pub fn render_page(
             const t = document.getElementById('flash-toast');
             if (t) t.remove();
         }}, 4000);
+
+        // Oxide Echo: Real-time WebSocket connection (Laravel Echo parity)
+        (function initWebSocket() {{
+            try {{
+                const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const socket = new WebSocket(proto + '//' + window.location.host + '/admin/ws');
+                socket.onmessage = function(event) {{
+                    try {{
+                        const payload = JSON.parse(event.data);
+                        const pathParts = window.location.pathname.split('/');
+                        const currentSlug = pathParts[2];
+                        if (currentSlug && (payload.channel === 'admin' || payload.channel === currentSlug)) {{
+                            if (typeof updateTable === 'function') {{
+                                updateTable(currentSlug);
+                            }}
+                        }}
+                    }} catch(e) {{}}
+                }};
+                socket.onclose = function() {{
+                    setTimeout(initWebSocket, 4000);
+                }};
+            }} catch(err) {{}}
+        }})();
     </script>
 </body>
 </html>"#,

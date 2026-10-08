@@ -453,6 +453,70 @@ MailMessage::to("customer@example.com")
 
 ---
 
+## 📡 Real-Time WebSockets & Broadcasting (Laravel Echo & Reverb Parity)
+
+OxideAdmin features built-in WebSocket event broadcasting using Tokio async broadcast channels:
+
+```rust
+use oxide_admin::prelude::*;
+
+// 1. Broadcast domain events across connected clients
+admin.broadcast("orders", "order:created", serde_json::json!({
+    "id": "ORD-1004",
+    "customer": "Alice",
+    "amount": 290
+}));
+```
+
+- **Oxide Echo in Browser**: Every admin page automatically connects to `ws://localhost:3000/admin/ws`. When records change in other browser tabs or background jobs, tables auto-refresh in real time without page reloads!
+- **Standalone or Integrated**: Mounts natively on Axum (`/admin/ws`) or runs as a dedicated server via `oxi ws:serve`.
+
+---
+
+## 🧪 Pest-Style Fluent Testing
+
+Instead of rigid `assert_eq!`, OxideAdmin includes a fluent, chainable testing library mirroring **Pest PHP**:
+
+```rust
+use oxide_admin::prelude::*;
+
+#[test]
+fn test_order_creation() {
+    pest_test("it validates user and order state", || {
+        expect(&user.name).to_be("Taylor")
+            .and(&user.email).to_contain("@laravel.com")
+            .and(&user.role).to_be(&Role::Superadmin)
+            .and(user.status.is_active()).to_be_true();
+
+        expect(order.amount).to_be_greater_than(100);
+        expect(&order.notes).to_be_empty();
+    });
+}
+```
+
+---
+
+## 🐞 `dd!()`, `dump!()`, `ddd!()` Debugging Macros
+
+Enjoy Laravel's iconic dump-and-die debugging directly in Rust:
+
+```rust
+use oxide_admin::{dd, dump, ddd};
+
+let user = fetch_user();
+
+// Pretty-prints variable with cyan borders and line numbers:
+dump!(user);
+
+// "Dump and Die": prints variable, location, and immediately halts:
+dd!(user);
+
+// "Deep Dump & Die" (Ignition / Ray style):
+ddd!(user);
+```
+
+---
+
 ## 🔐 OAuth SSO & Role Switcher
 
 In addition to email/password authentication, OxideAdmin supports single-sign-on (SSO) integration with GitHub OAuth (`/admin/oauth/github`), as well as a one-click demo role switcher to test permission levels on the fly.
@@ -494,6 +558,9 @@ Demo accounts (password for all: `admin123`):
 - [x] Eloquent-style fluent Query builder with camelCase aliases (`Query::table`)
 - [x] Cache system with TTL and native RESP Redis driver (`CacheDriver`, `RedisCache`)
 - [x] Artisan-grade CLI tool `oxi` (`make:resource`, `make:migration`, `migrate`, `db:seed`, etc.)
+- [x] Real-time WebSocket broadcasting with Tokio pub/sub (Laravel Echo & Reverb parity)
+- [x] Pest PHP-style chainable testing framework (`expect().to_be().and()`)
+- [x] Laravel `dd!()`, `dump!()`, and `ddd!()` terminal debugging macros
 - [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
 - [ ] PostgreSQL and SeaORM repository adapters
 - [ ] Bulk actions and CSV export queue

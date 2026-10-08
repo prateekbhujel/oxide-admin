@@ -104,6 +104,10 @@ impl UserStatus {
             _ => Self::Active,
         }
     }
+
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Active)
+    }
 }
 
 impl fmt::Display for UserStatus {

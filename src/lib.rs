@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cache;
+pub mod debug;
 pub mod domain;
 pub mod form;
 pub mod mail;
@@ -9,8 +10,10 @@ pub mod queue;
 pub mod repository;
 pub mod resource;
 pub mod table;
+pub mod testing;
 pub mod theme;
 pub mod view;
+pub mod ws;
 
 pub mod prelude {
     pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
@@ -30,7 +33,9 @@ pub mod prelude {
         RowData,
     };
     pub use crate::table::{Column, Table, TableAction, TableFilter, TableStyle};
+    pub use crate::testing::{expect, test as pest_test, Expectation};
     pub use crate::theme::{FontFamily, PrimaryColor, ThemeConfig};
+    pub use crate::ws::{BroadcastEvent, Broadcaster};
 }
 
 
