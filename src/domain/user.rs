@@ -29,6 +29,48 @@ impl Role {
             _ => Self::Member,
         }
     }
+    pub fn permissions(&self) -> &'static [&'static str] {
+        match self {
+            Self::Founder | Self::Superadmin => &[
+                "users.view",
+                "users.create",
+                "users.edit",
+                "users.delete",
+                "orders.view",
+                "orders.create",
+                "orders.edit",
+                "orders.delete",
+                "audit.view",
+            ],
+            Self::Admin => &[
+                "users.view",
+                "users.create",
+                "users.edit",
+                "orders.view",
+                "orders.create",
+                "orders.edit",
+                "orders.delete",
+                "audit.view",
+            ],
+            Self::Editor => &[
+                "users.view",
+                "orders.view",
+                "orders.create",
+                "orders.edit",
+            ],
+            Self::Member => &[
+                "users.view",
+                "orders.view",
+            ],
+        }
+    }
+
+    pub fn can(&self, permission: &str) -> bool {
+        match self {
+            Self::Founder | Self::Superadmin => true,
+            _ => self.permissions().contains(&permission),
+        }
+    }
 }
 
 impl fmt::Display for Role {
@@ -76,4 +118,45 @@ pub struct User {
     pub role: Role,
     pub status: UserStatus,
     pub created_at: String,
+}
+
+impl User {
+    pub fn can(&self, permission: &str) -> bool {
+        if self.status != UserStatus::Active {
+            return false;
+        }
+        self.role.can(permission)
+    }
+
+    pub fn has_role(&self, role: &Role) -> bool {
+        &self.role == role
+    }
+
+    pub fn is_superadmin(&self) -> bool {
+        matches!(self.role, Role::Founder | Role::Superadmin)
+    }
+
+    pub fn initials(&self) -> String {
+        let parts: Vec<&str> = self.name.split_whitespace().collect();
+        match parts.len() {
+            0 => "U".to_string(),
+            1 => parts[0].chars().take(2).collect::<String>().to_uppercase(),
+            _ => format!(
+                "{}{}",
+                parts[0].chars().next().unwrap_or('U'),
+                parts.last().and_then(|p| p.chars().next()).unwrap_or(' ')
+            ).to_uppercase(),
+        }
+    }
+
+    pub fn default_admin() -> Self {
+        Self {
+            id: "2".into(),
+            name: "Pratik Bhujel".into(),
+            email: "pratik.bhujel@oxideadmin.dev".into(),
+            role: Role::Superadmin,
+            status: UserStatus::Active,
+            created_at: "2026-09-02".into(),
+        }
+    }
 }

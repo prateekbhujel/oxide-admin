@@ -1,7 +1,7 @@
 use crate::resource::{QueryState, Resource};
 use crate::table::{Column, ColumnType};
 
-pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> String {
+pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &crate::domain::User) -> String {
     let table_def = resource.table();
     let (rows, total_count) = resource.fetch_rows(query);
 
@@ -67,6 +67,9 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
             cols_len = cols_len
         ));
     } else {
+        let can_edit = resource.can_edit(user);
+        let can_delete = resource.can_delete(user);
+
         for row in &rows {
             let mut row_tds = String::new();
 
@@ -76,21 +79,33 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
                 row_tds.push_str(&format!(r#"<td class="px-5 py-3.5 whitespace-nowrap text-xs text-zinc-200">{rendered_cell}</td>"#));
             }
 
-            // Edit and Delete Actions wired to native HTML dialogs
+            // Edit and Delete Actions wired to native HTML dialogs with policy enforcement
             let row_values_json = serde_json::to_string(&row.values).unwrap_or_else(|_| "{}".to_string());
             let escaped_row_values_json = row_values_json.replace('"', "&quot;");
 
-            let actions_html = format!(
-                r#"<button type="button" onclick="openEditDialog('{slug}', '{id}', '{values}')" class="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors" title="Edit">
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-                </button>
-                <button type="button" onclick="openDeleteDialog('{slug}', '{id}')" class="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete">
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                </button>"#,
-                slug = resource.slug(),
-                id = row.id,
-                values = escaped_row_values_json
-            );
+            let mut actions_html = String::new();
+            if can_edit {
+                actions_html.push_str(&format!(
+                    r#"<button type="button" onclick="openEditDialog('{slug}', '{id}', '{values}')" class="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors" title="Edit">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                    </button>"#,
+                    slug = resource.slug(),
+                    id = row.id,
+                    values = escaped_row_values_json
+                ));
+            }
+            if can_delete {
+                actions_html.push_str(&format!(
+                    r#"<button type="button" onclick="openDeleteDialog('{slug}', '{id}')" class="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>"#,
+                    slug = resource.slug(),
+                    id = row.id
+                ));
+            }
+            if !can_edit && !can_delete {
+                actions_html = r#"<span class="text-zinc-600 text-xs select-none">—</span>"#.to_string();
+            }
 
             row_tds.push_str(&format!(r#"<td class="px-5 py-3.5 whitespace-nowrap text-xs text-right space-x-1">{actions_html}</td>"#));
             body_rows.push_str(&format!(r#"<tr class="hover:bg-zinc-850/50 transition-colors border-b border-zinc-800/80 last:border-b-0">{row_tds}</tr>"#));
@@ -100,6 +115,21 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
     // Build Pagination HTML
     let prev_disabled = if current_page <= 1 { "opacity-30 pointer-events-none" } else { "" };
     let next_disabled = if current_page >= total_pages || total_pages == 0 { "opacity-30 pointer-events-none" } else { "" };
+
+    let create_btn_html = if resource.can_create(user) {
+        format!(
+            r#"<button 
+                type="button" 
+                onclick="openCreateDialog()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                <span>New {name}</span>
+            </button>"#,
+            name = resource.name()
+        )
+    } else {
+        String::new()
+    };
 
     format!(
         r#"<!-- Table Controls: Search & Create -->
@@ -120,13 +150,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
             
             <div class="flex items-center gap-3">
                 <span class="text-[11px] text-zinc-500 font-mono">{total_count} records</span>
-                <button 
-                    type="button" 
-                    onclick="openCreateDialog()"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                    <span>New {name}</span>
-                </button>
+                {create_btn_html}
             </div>
         </div>
 
@@ -166,10 +190,10 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState) -> Stri
             </div>
         </div>"#,
         slug = resource.slug(),
-        name = resource.name(),
         plural = resource.plural_name(),
         search_val = query.search,
         total_count = total_count,
+        create_btn_html = create_btn_html,
         header_th = header_th,
         body_rows = body_rows,
         start_idx = start_idx,

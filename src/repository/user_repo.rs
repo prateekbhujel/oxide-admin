@@ -5,6 +5,7 @@ use crate::resource::QueryState;
 pub trait UserRepository: Send + Sync {
     fn list(&self, query: &QueryState) -> (Vec<User>, usize);
     fn find_by_id(&self, id: &str) -> Option<User>;
+    fn find_by_email(&self, email: &str) -> Option<User>;
     fn save(&self, user: User) -> Result<String, String>;
     fn update(&self, id: &str, name: String, email: String, role: Role, status: UserStatus) -> Result<(), String>;
     fn delete(&self, id: &str) -> Result<(), String>;
@@ -150,6 +151,11 @@ impl UserRepository for InMemoryUserRepository {
     fn find_by_id(&self, id: &str) -> Option<User> {
         let store = self.storage.read().unwrap();
         store.iter().find(|u| u.id == id).cloned()
+    }
+
+    fn find_by_email(&self, email: &str) -> Option<User> {
+        let store = self.storage.read().unwrap();
+        store.iter().find(|u| u.email.eq_ignore_ascii_case(email)).cloned()
     }
 
     fn save(&self, user: User) -> Result<String, String> {

@@ -157,6 +157,32 @@ impl UserRepository for SqliteUserRepository {
         ).ok()
     }
 
+    fn find_by_email(&self, email: &str) -> Option<User> {
+        let db = self.conn.lock().unwrap();
+
+        db.query_row(
+            "SELECT id, name, email, role, status, created_at FROM users WHERE LOWER(email) = LOWER(?1)",
+            params![email],
+            |row| {
+                let id: i64 = row.get(0)?;
+                let name: String = row.get(1)?;
+                let email: String = row.get(2)?;
+                let role_str: String = row.get(3)?;
+                let status_str: String = row.get(4)?;
+                let created_at: String = row.get(5)?;
+
+                Ok(User {
+                    id: id.to_string(),
+                    name,
+                    email,
+                    role: Role::from_str_loose(&role_str),
+                    status: UserStatus::from_str_loose(&status_str),
+                    created_at,
+                })
+            },
+        ).ok()
+    }
+
     fn save(&self, user: User) -> Result<String, String> {
         let db = self.conn.lock().unwrap();
         db.execute(

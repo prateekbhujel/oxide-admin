@@ -7,10 +7,15 @@ pub fn render_page(
     content_html: &str,
     dialogs_html: &str,
     flash_message: Option<&str>,
+    user: &crate::domain::User,
 ) -> String {
     let mut sidebar_nav = String::new();
 
     for res in resources {
+        if !res.can_view(user) {
+            continue;
+        }
+
         let is_active = res.slug() == current_slug;
         let active_classes = if is_active {
             "bg-zinc-800 text-zinc-100 font-medium"
@@ -21,6 +26,7 @@ pub fn render_page(
         let icon_svg = match res.slug() {
             "users" => r#"<svg class="w-4 h-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>"#,
             "orders" => r#"<svg class="w-4 h-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>"#,
+            "audit" => r#"<svg class="w-4 h-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>"#,
             _ => r#"<svg class="w-4 h-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>"#,
         };
 
@@ -122,11 +128,11 @@ pub fn render_page(
         <div class="p-3 border-t border-zinc-800 flex items-center justify-between">
             <div class="flex items-center gap-2 min-w-0">
                 <div class="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-mono font-medium text-zinc-300">
-                    PB
+                    {user_initials}
                 </div>
                 <div class="min-w-0">
-                    <span class="block text-xs font-medium text-zinc-200 truncate">Pratik Bhujel</span>
-                    <span class="block text-[10px] text-zinc-500 truncate">Architect</span>
+                    <span class="block text-xs font-medium text-zinc-200 truncate">{user_name}</span>
+                    <span class="block text-[10px] text-zinc-400 font-mono truncate">{user_role}</span>
                 </div>
             </div>
             <a href="/admin/logout" title="Sign Out" class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
@@ -144,7 +150,8 @@ pub fn render_page(
                 <span class="text-zinc-600">/</span>
                 <span class="text-zinc-200 font-medium">{title}</span>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2.5">
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-700/80 bg-zinc-850 text-zinc-300">{user_role}</span>
                 <span class="text-xs text-zinc-500 font-mono">⌘K</span>
             </div>
         </header>
@@ -251,6 +258,26 @@ pub fn render_page(
         sidebar_nav = sidebar_nav,
         content_html = content_html,
         dialogs_html = dialogs_html,
-        toast_html = toast_html
+        toast_html = toast_html,
+        user_initials = user.initials(),
+        user_name = user.name,
+        user_role = user.role.as_str()
+    )
+}
+
+pub fn render_forbidden_page(user: &crate::domain::User, resource_name: &str) -> String {
+    format!(
+        r#"<div class="py-16 text-center max-w-md mx-auto">
+            <div class="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 mx-auto flex items-center justify-center mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h2 class="text-base font-semibold text-zinc-100 mb-1">Access Denied (403 Forbidden)</h2>
+            <p class="text-xs text-zinc-400 mb-6">Your current role (<span class="font-mono text-zinc-300">{role}</span>) does not have authorization to access <span class="text-zinc-200 font-medium">{resource}</span>.</p>
+            <a href="/admin" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 transition-colors">
+                <span>Return to Workspace</span>
+            </a>
+        </div>"#,
+        role = user.role.as_str(),
+        resource = resource_name
     )
 }

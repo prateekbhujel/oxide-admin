@@ -107,7 +107,38 @@ pub fn render_login_page(error_msg: Option<&str>) -> String {
                     </button>
                 </div>
             </form>
+
+            <!-- Quick Demo Role Switcher -->
+            <div class="mt-6 pt-5 border-t border-zinc-800">
+                <div class="text-[11px] font-medium text-zinc-400 mb-2">Switch Demo Account:</div>
+                <div class="grid grid-cols-2 gap-2 text-left">
+                    <button type="button" onclick="setDemo('pratik.bhujel@oxideadmin.dev')" class="p-2 rounded-lg bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 text-left transition-colors">
+                        <div class="text-xs font-medium text-zinc-200">Pratik Bhujel</div>
+                        <div class="text-[10px] text-indigo-400 font-mono">Superadmin</div>
+                    </button>
+                    <button type="button" onclick="setDemo('dharma.shrestha@oxideadmin.dev')" class="p-2 rounded-lg bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 text-left transition-colors">
+                        <div class="text-xs font-medium text-zinc-200">Dharma Raj</div>
+                        <div class="text-[10px] text-blue-400 font-mono">Admin</div>
+                    </button>
+                    <button type="button" onclick="setDemo('lasta.chaudhary@oxideadmin.dev')" class="p-2 rounded-lg bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 text-left transition-colors">
+                        <div class="text-xs font-medium text-zinc-200">Lasta Chaudhary</div>
+                        <div class="text-[10px] text-amber-400 font-mono">Editor</div>
+                    </button>
+                    <button type="button" onclick="setDemo('ranjan.gumanju@oxideadmin.dev')" class="p-2 rounded-lg bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 text-left transition-colors">
+                        <div class="text-xs font-medium text-zinc-200">Ranjan Gumanju</div>
+                        <div class="text-[10px] text-zinc-400 font-mono">Member (Read-only)</div>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        function setDemo(email) {{
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = 'admin123';
+        }}
+    </script>
 </body>
 </html>"#
     )
