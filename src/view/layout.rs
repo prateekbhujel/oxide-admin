@@ -9,7 +9,19 @@ pub fn render_page(
     flash_message: Option<&str>,
     user: &crate::domain::User,
 ) -> String {
-    let mut sidebar_nav = String::new();
+    let is_dash_active = current_slug == "dashboard" || current_slug.is_empty();
+    let dash_classes = if is_dash_active {
+        "bg-zinc-800 text-zinc-100 font-medium"
+    } else {
+        "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60"
+    };
+
+    let mut sidebar_nav = format!(
+        r#"<a href="/admin/dashboard" class="flex items-center gap-2.5 px-3 py-2 rounded-md text-xs transition-colors {dash_classes}">
+            <svg class="w-4 h-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            <span>Dashboard</span>
+        </a>"#
+    );
 
     for res in resources {
         if !res.can_view(user) {

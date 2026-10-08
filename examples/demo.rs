@@ -32,8 +32,24 @@ impl Resource for UserResource {
         "users"
     }
 
+    fn form_mode(&self) -> FormMode {
+        FormMode::Page
+    }
+
     fn table(&self) -> Table {
         Table::new()
+            .striped()
+            .filter(TableFilter::select("role", "Role", vec![
+                ("Superadmin", "Superadmin"),
+                ("Admin", "Admin"),
+                ("Editor", "Editor"),
+                ("Member", "Member"),
+            ]))
+            .filter(TableFilter::select("status", "Status", vec![
+                ("Active", "Active"),
+                ("Pending", "Pending"),
+                ("Suspended", "Suspended"),
+            ]))
             .column(Column::text("id").label("ID").sortable())
             .column(Column::text("name").label("Full Name").searchable().sortable())
             .column(Column::text("email").label("Email Address").searchable())
@@ -57,11 +73,11 @@ impl Resource for UserResource {
         Form::new()
             .field(FormField::text("name").required().placeholder("Full Name"))
             .field(FormField::email("email").required().placeholder("user@example.com"))
-            .field(FormField::select("role", vec![
-                ("Member", "Member"),
-                ("Editor", "Editor"),
-                ("Admin", "Admin"),
-                ("Superadmin", "Superadmin"),
+            .field(FormField::searchable_select("role", vec![
+                ("Member", "Member (Standard Team Account)"),
+                ("Editor", "Editor (Orders & Content Management)"),
+                ("Admin", "Admin (Team Management)"),
+                ("Superadmin", "Superadmin (Full Control)"),
             ]))
             .field(FormField::select("status", vec![
                 ("Active", "Active"),
@@ -71,7 +87,18 @@ impl Resource for UserResource {
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
-        let (users, total) = self.repo.list(query);
+        let (mut users, total) = self.repo.list(query);
+        if let Some(role_filter) = query.filters.get("role") {
+            if !role_filter.is_empty() {
+                users.retain(|u| u.role.as_str() == role_filter);
+            }
+        }
+        if let Some(status_filter) = query.filters.get("status") {
+            if !status_filter.is_empty() {
+                users.retain(|u| u.status.as_str() == status_filter);
+            }
+        }
+        let total_count = if query.filters.is_empty() { total } else { users.len() };
         let rows = users
             .into_iter()
             .map(|u| {
@@ -84,7 +111,7 @@ impl Resource for UserResource {
                     .insert("created_at", &u.created_at)
             })
             .collect();
-        (rows, total)
+        (rows, total_count)
     }
 
     fn get_row(&self, id: &str) -> Option<RowData> {
@@ -160,8 +187,18 @@ impl Resource for OrderResource {
         "orders"
     }
 
+    fn form_mode(&self) -> FormMode {
+        FormMode::SlideOver
+    }
+
     fn table(&self) -> Table {
         Table::new()
+            .compact()
+            .filter(TableFilter::select("status", "Status", vec![
+                ("Paid", "Paid"),
+                ("Pending", "Pending"),
+                ("Refunded", "Refunded"),
+            ]))
             .column(Column::text("id").label("Order Number").searchable().sortable())
             .column(Column::text("customer").label("Customer").searchable())
             .column(Column::text("amount").label("Amount").sortable())
@@ -186,7 +223,13 @@ impl Resource for OrderResource {
     }
 
     fn fetch_rows(&self, query: &QueryState) -> (Vec<RowData>, usize) {
-        let (orders, total) = self.repo.list(query);
+        let (mut orders, total) = self.repo.list(query);
+        if let Some(status_filter) = query.filters.get("status") {
+            if !status_filter.is_empty() {
+                orders.retain(|o| o.status.as_str() == status_filter);
+            }
+        }
+        let total_count = if query.filters.is_empty() { total } else { orders.len() };
         let rows = orders
             .into_iter()
             .map(|o| {
@@ -198,7 +241,7 @@ impl Resource for OrderResource {
                     .insert("date", &o.date)
             })
             .collect();
-        (rows, total)
+        (rows, total_count)
     }
 
     fn get_row(&self, id: &str) -> Option<RowData> {

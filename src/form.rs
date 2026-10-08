@@ -7,6 +7,7 @@ pub enum FieldType {
     Password,
     Number,
     Select { options: Vec<(String, String)> },
+    SearchableSelect { options: Vec<(String, String)> },
     Textarea,
     Toggle,
 }
@@ -49,6 +50,19 @@ impl FormField {
             label: capitalize(&name),
             name,
             field_type: FieldType::Select {
+                options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            },
+            required: false,
+            placeholder: None,
+        }
+    }
+
+    pub fn searchable_select(name: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
+        let name = name.into();
+        Self {
+            label: capitalize(&name),
+            name,
+            field_type: FieldType::SearchableSelect {
                 options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
             },
             required: false,

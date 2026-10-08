@@ -14,7 +14,7 @@ use crate::domain::audit::AuditLog;
 use crate::domain::user::{Role, User};
 use crate::repository::{AuditRepository, UserRepository};
 use crate::resource::{DynResource, QueryState, Resource};
-use crate::view::{dialogs, layout, table_view};
+use crate::view::{dashboard_view, dialogs, form_page, layout, table_view};
 
 #[derive(Clone, Default)]
 pub struct AdminPanel {
@@ -31,6 +31,8 @@ pub struct TableQuery {
     pub sort_by: Option<String>,
     pub sort_desc: Option<String>,
     pub flash: Option<String>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,9 +77,14 @@ impl AdminPanel {
                 move |form| login_submit(panel, form)
             }))
             .route("/logout", get(logout_handler))
+            .route("/oauth/github", get(oauth_github_mock))
             .route("/", get({
                 let panel = shared_panel.clone();
                 move |headers| root_redirect(panel, headers)
+            }))
+            .route("/dashboard", get({
+                let panel = shared_panel.clone();
+                move |headers| dashboard_page(panel, headers)
             }))
             .route("/:slug", get({
                 let panel = shared_panel.clone();
@@ -87,11 +94,17 @@ impl AdminPanel {
                 let panel = shared_panel.clone();
                 move |headers, path, query| resource_table_partial(panel, headers, path, query)
             }))
-            .route("/:slug/create", post({
+            .route("/:slug/create", get({
+                let panel = shared_panel.clone();
+                move |headers, path| resource_create_page(panel, headers, path)
+            }).post({
                 let panel = shared_panel.clone();
                 move |headers, path, form| resource_create(panel, headers, path, form)
             }))
-            .route("/:slug/edit/:id", post({
+            .route("/:slug/edit/:id", get({
+                let panel = shared_panel.clone();
+                move |headers, path| resource_edit_page(panel, headers, path)
+            }).post({
                 let panel = shared_panel.clone();
                 move |headers, path, form| resource_update(panel, headers, path, form)
             }))
@@ -223,17 +236,187 @@ async fn logout_handler() -> Response {
     response
 }
 
+async fn oauth_github_mock() -> Response {
+    let mut response = Redirect::to("/admin/dashboard?flash=Successfully+authenticated+via+GitHub+SSO").into_response();
+    let cookie_str = "oxide_session=user:pratik.bhujel@oxideadmin.dev; Path=/admin; HttpOnly; SameSite=Lax";
+    response.headers_mut().insert(
+        SET_COOKIE,
+        cookie_str.parse().unwrap(),
+    );
+    response
+}
+
 async fn root_redirect(panel: Arc<AdminPanel>, headers: HeaderMap) -> Response {
+    let _user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    Redirect::to("/admin/dashboard").into_response()
+}
+
+async fn dashboard_page(panel: Arc<AdminPanel>, headers: HeaderMap) -> Response {
     let user = match get_authenticated_user(&panel, &headers) {
         Some(u) => u,
         None => return Redirect::to("/admin/login").into_response(),
     };
 
-    if let Some(first) = panel.resources.iter().find(|r| r.can_view(&user)) {
-        Redirect::to(&format!("/admin/{}", first.slug())).into_response()
+    let empty_query = QueryState {
+        page: 1,
+        per_page: 500,
+        search: String::new(),
+        sort_by: None,
+        sort_desc: false,
+        filters: HashMap::new(),
+    };
+
+    let (total_orders, gross_rev_str) = if let Some(order_res) = panel.resource_map.get("orders") {
+        let (rows, total) = order_res.fetch_rows(&empty_query);
+        let mut total_cents: i64 = 0;
+        for row in &rows {
+            if let Some(val) = row.get("amount") {
+                let clean = val.replace('$', "").replace(',', "").trim().to_string();
+                if let Ok(f) = clean.parse::<f64>() {
+                    total_cents += (f * 100.0) as i64;
+                }
+            }
+        }
+        let formatted = format!("${:.2}", (total_cents as f64) / 100.0);
+        (total, formatted)
     } else {
-        Html("<h1>403 Forbidden: No resources accessible for your role.</h1>").into_response()
+        (0, "$0.00".to_string())
+    };
+
+    let total_users = if let Some(user_res) = panel.resource_map.get("users") {
+        let (_, total) = user_res.fetch_rows(&empty_query);
+        total
+    } else if let Some(ref repo) = panel.user_repo {
+        repo.list(&empty_query).1
+    } else {
+        1
+    };
+
+    let recent_audits = if let Some(ref repo) = panel.audit_repo {
+        repo.list(&empty_query).0
+    } else {
+        Vec::new()
+    };
+
+    let dashboard_content = dashboard_view::render_dashboard(
+        &user,
+        total_orders,
+        &gross_rev_str,
+        total_users,
+        &recent_audits,
+    );
+
+    let full_html = layout::render_page(
+        "Executive Dashboard",
+        "dashboard",
+        &panel.resources,
+        &dashboard_content,
+        "",
+        None,
+        &user,
+    );
+
+    Html(full_html).into_response()
+}
+
+async fn resource_create_page(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, Html("<h1>404 Resource Not Found</h1>")).into_response();
+    };
+
+    if !res.can_create(&user) {
+        let forbidden_body = layout::render_forbidden_page(&user, res.name());
+        let full_html = layout::render_page(
+            "Access Restricted",
+            &slug,
+            &panel.resources,
+            &forbidden_body,
+            "",
+            None,
+            &user,
+        );
+        return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
     }
+
+    let form_page_content = form_page::render_form_page(res.as_ref(), None, None);
+    let title = format!("Create {}", res.name());
+    let full_html = layout::render_page(
+        &title,
+        &slug,
+        &panel.resources,
+        &form_page_content,
+        "",
+        None,
+        &user,
+    );
+    Html(full_html).into_response()
+}
+
+async fn resource_edit_page(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path((slug, id)): Path<(String, String)>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, Html("<h1>404 Resource Not Found</h1>")).into_response();
+    };
+
+    if !res.can_edit(&user) {
+        let forbidden_body = layout::render_forbidden_page(&user, res.name());
+        let full_html = layout::render_page(
+            "Access Restricted",
+            &slug,
+            &panel.resources,
+            &forbidden_body,
+            "",
+            None,
+            &user,
+        );
+        return (StatusCode::FORBIDDEN, Html(full_html)).into_response();
+    }
+
+    let empty_query = QueryState {
+        page: 1,
+        per_page: 500,
+        search: String::new(),
+        sort_by: None,
+        sort_desc: false,
+        filters: HashMap::new(),
+    };
+    let (rows, _) = res.fetch_rows(&empty_query);
+    let row_data = rows.into_iter().find(|r| r.get("id") == Some(id.as_str()));
+    let values_map = row_data.map(|r| r.values);
+
+    let form_page_content = form_page::render_form_page(res.as_ref(), Some(&id), values_map.as_ref());
+    let title = format!("Edit {} #{}", res.name(), id);
+    let full_html = layout::render_page(
+        &title,
+        &slug,
+        &panel.resources,
+        &form_page_content,
+        "",
+        None,
+        &user,
+    );
+    Html(full_html).into_response()
 }
 
 async fn resource_page(
@@ -432,11 +615,25 @@ async fn resource_delete(
 }
 
 fn parse_query(q: TableQuery) -> QueryState {
+    let mut filters = HashMap::new();
+    for (k, v) in q.extra {
+        if let Some(filter_name) = k.strip_prefix("filter_") {
+            if !v.is_empty() {
+                filters.insert(filter_name.to_string(), v);
+            }
+        } else if !k.is_empty() && k != "page" && k != "search" && k != "sort_by" && k != "sort_desc" && k != "flash" {
+            if !v.is_empty() {
+                filters.insert(k, v);
+            }
+        }
+    }
+
     QueryState {
         page: q.page.unwrap_or(1),
         per_page: 8,
         search: q.search.unwrap_or_default().trim().to_string(),
         sort_by: q.sort_by.filter(|s| !s.is_empty()),
         sort_desc: q.sort_desc.map(|v| v == "true").unwrap_or(false),
+        filters,
     }
 }

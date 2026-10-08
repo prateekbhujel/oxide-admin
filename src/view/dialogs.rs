@@ -1,58 +1,92 @@
 use crate::form::{FieldType, Form};
-use crate::resource::Resource;
+use crate::resource::{FormMode, Resource};
 
 pub fn render_dialogs(resource: &dyn Resource) -> String {
     let form = resource.form();
     let slug = resource.slug();
     let name = resource.name();
+    let mode = resource.form_mode();
 
     let create_fields_html = render_form_fields(&form, "create");
     let edit_fields_html = render_form_fields(&form, "edit");
 
+    // If resource uses FormMode::Page, create/edit forms are full pages, so only delete confirmation dialog is needed
+    if mode == FormMode::Page {
+        return render_delete_dialog(slug);
+    }
+
+    let (dialog_classes, edit_dialog_classes) = if mode == FormMode::SlideOver {
+        (
+            "fixed inset-y-0 right-0 h-full max-w-md w-full bg-zinc-900 border-l border-zinc-800 p-0 text-zinc-100 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm m-0 ml-auto flex flex-col",
+            "fixed inset-y-0 right-0 h-full max-w-md w-full bg-zinc-900 border-l border-zinc-800 p-0 text-zinc-100 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm m-0 ml-auto flex flex-col"
+        )
+    } else {
+        (
+            "bg-zinc-900 border border-zinc-800 rounded-xl p-0 text-zinc-100 max-w-md w-full shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto",
+            "bg-zinc-900 border border-zinc-800 rounded-xl p-0 text-zinc-100 max-w-md w-full shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto"
+        )
+    };
+
+    let delete_dialog = render_delete_dialog(slug);
+
     format!(
-        r#"<!-- Native In-App Create Dialog -->
-<dialog id="create-dialog" class="bg-zinc-900 border border-zinc-800 rounded-xl p-0 text-zinc-100 max-w-md w-full shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+        r#"<!-- Native In-App Create Dialog/SlideOver ({mode:?}) -->
+<dialog id="create-dialog" class="{dialog_classes}">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
         <h3 class="text-sm font-medium text-zinc-100">New {name}</h3>
         <button type="button" onclick="document.getElementById('create-dialog').close()" class="text-zinc-500 hover:text-zinc-300 text-lg leading-none">&times;</button>
     </div>
-    <form method="POST" action="/admin/{slug}/create" class="p-5 space-y-4">
-        <div class="space-y-3">
+    <form method="POST" action="/admin/{slug}/create" class="p-5 space-y-4 flex-1 overflow-y-auto flex flex-col justify-between">
+        <div class="space-y-3.5">
             {create_fields_html}
         </div>
-        <div class="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+        <div class="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2 shrink-0">
             <button type="button" onclick="document.getElementById('create-dialog').close()" class="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
                 Cancel
             </button>
-            <button type="submit" class="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors">
+            <button type="submit" class="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
                 Create {name}
             </button>
         </div>
     </form>
 </dialog>
 
-<!-- Native In-App Edit Dialog -->
-<dialog id="edit-dialog" class="bg-zinc-900 border border-zinc-800 rounded-xl p-0 text-zinc-100 max-w-md w-full shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+<!-- Native In-App Edit Dialog/SlideOver ({mode:?}) -->
+<dialog id="edit-dialog" class="{edit_dialog_classes}">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
         <h3 id="edit-dialog-title" class="text-sm font-medium text-zinc-100">Edit {name}</h3>
         <button type="button" onclick="document.getElementById('edit-dialog').close()" class="text-zinc-500 hover:text-zinc-300 text-lg leading-none">&times;</button>
     </div>
-    <form id="edit-form" method="POST" action="" class="p-5 space-y-4">
-        <div class="space-y-3">
+    <form id="edit-form" method="POST" action="" class="p-5 space-y-4 flex-1 overflow-y-auto flex flex-col justify-between">
+        <div class="space-y-3.5">
             {edit_fields_html}
         </div>
-        <div class="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+        <div class="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2 shrink-0">
             <button type="button" onclick="document.getElementById('edit-dialog').close()" class="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
                 Cancel
             </button>
-            <button type="submit" class="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors">
+            <button type="submit" class="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-medium text-xs transition-colors shadow-sm">
                 Save Changes
             </button>
         </div>
     </form>
 </dialog>
 
-<!-- Native In-App Delete Confirmation Dialog (Replaces browser alert) -->
+{delete_dialog}"#,
+        name = name,
+        slug = slug,
+        dialog_classes = dialog_classes,
+        edit_dialog_classes = edit_dialog_classes,
+        create_fields_html = create_fields_html,
+        edit_fields_html = edit_fields_html,
+        delete_dialog = delete_dialog,
+        mode = mode
+    )
+}
+
+fn render_delete_dialog(slug: &str) -> String {
+    format!(
+        r#"<!-- Native In-App Delete Confirmation Dialog -->
 <dialog id="delete-dialog" class="bg-zinc-900 border border-zinc-800 rounded-xl p-0 text-zinc-100 max-w-sm w-full shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto">
     <div class="p-5">
         <div class="flex items-start gap-3.5 mb-4">
@@ -64,7 +98,7 @@ pub fn render_dialogs(resource: &dyn Resource) -> String {
                 <p class="text-xs text-zinc-400 mt-1">Are you sure you want to delete this record? This action cannot be undone.</p>
             </div>
         </div>
-        <form id="delete-form" method="POST" action="" class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+        <form id="delete-form" method="POST" action="/admin/{slug}/delete" class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
             <button type="button" onclick="document.getElementById('delete-dialog').close()" class="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
                 Cancel
             </button>
@@ -74,10 +108,7 @@ pub fn render_dialogs(resource: &dyn Resource) -> String {
         </form>
     </div>
 </dialog>"#,
-        name = name,
-        slug = slug,
-        create_fields_html = create_fields_html,
-        edit_fields_html = edit_fields_html
+        slug = slug
     )
 }
 
@@ -98,11 +129,44 @@ fn render_form_fields(form: &Form, prefix: &str) -> String {
                     ));
                 }
                 format!(
-                    r#"<select id="{input_id}" name="{name}" {required} class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 transition-colors">{opts_html}</select>"#,
+                    r#"<select id="{input_id}" name="{name}" {required} class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 transition-colors font-sans">{opts_html}</select>"#,
                     input_id = input_id,
                     name = f.name,
                     required = required,
                     opts_html = opts_html
+                )
+            }
+            FieldType::SearchableSelect { options } => {
+                let first_val = options.first().map(|(v, _)| v.as_str()).unwrap_or("");
+                let first_lbl = options.first().map(|(_, l)| l.as_str()).unwrap_or("Select...");
+                let mut items_html = String::new();
+                for (val, label) in options {
+                    items_html.push_str(&format!(
+                        r#"<div onclick="selectSearchableOption('{input_id}', '{val}', '{label}')" data-label="{label}" class="searchable-opt px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white rounded cursor-pointer transition-colors flex items-center justify-between"><span>{label}</span><span class="text-[10px] text-zinc-500 font-mono">{val}</span></div>"#
+                    ));
+                }
+                format!(
+                    r#"<div class="relative" id="container-{input_id}">
+                        <input type="hidden" id="{input_id}" name="{name}" value="{first_val}" {required} />
+                        <button type="button" onclick="toggleSearchableSelect('{input_id}')" id="btn-{input_id}" class="w-full flex items-center justify-between px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 transition-colors">
+                            <span id="label-{input_id}" class="truncate">{first_lbl}</span>
+                            <svg class="w-3.5 h-3.5 text-zinc-500 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="dropdown-{input_id}" class="hidden absolute z-50 left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl p-1.5 max-h-52 overflow-y-auto backdrop-blur-md">
+                            <div class="p-1 border-b border-zinc-800 mb-1">
+                                <input type="text" placeholder="Search options..." oninput="filterSearchableSelect('{input_id}', this.value)" class="w-full px-2 py-1 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-sans" />
+                            </div>
+                            <div class="space-y-0.5" id="opts-{input_id}">
+                                {items_html}
+                            </div>
+                        </div>
+                    </div>"#,
+                    input_id = input_id,
+                    name = f.name,
+                    required = required,
+                    first_val = first_val,
+                    first_lbl = first_lbl,
+                    items_html = items_html
                 )
             }
             FieldType::Email => {

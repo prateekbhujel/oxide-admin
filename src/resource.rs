@@ -3,6 +3,14 @@ use std::sync::Arc;
 use crate::table::Table;
 use crate::form::Form;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Modal,
+    SlideOver,
+    Page,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct QueryState {
     pub page: usize,
@@ -10,6 +18,7 @@ pub struct QueryState {
     pub search: String,
     pub sort_by: Option<String>,
     pub sort_desc: bool,
+    pub filters: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +51,10 @@ pub trait Resource: Send + Sync {
     fn slug(&self) -> &str;
     fn icon(&self) -> &str {
         "folder"
+    }
+
+    fn form_mode(&self) -> FormMode {
+        FormMode::Modal
     }
 
     fn table(&self) -> Table;

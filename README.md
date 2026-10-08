@@ -189,6 +189,75 @@ let admin = AdminPanel::new()
 
 ---
 
+## 📊 Executive Dashboard & Live KPIs
+
+OxideAdmin greets you with an executive operations dashboard (`/admin/dashboard`):
+- **Live KPI Metric Cards**: Gross Revenue calculation, total orders processed, team member counts, and audit security events.
+- **Recent Audit Stream**: Real-time mutation log showing who did what and when.
+- **Quick Operations**: Fast jump links directly into resource drawers and policy-gated views.
+
+---
+
+## 🪟 Flexible Form Modes: Modal, Slide-Over, or Dedicated Page
+
+Not all forms fit in a popup modal. OxideAdmin gives each resource control over how its forms render via `form_mode()`:
+
+```rust
+impl Resource for OrderResource {
+    // Choose between: FormMode::Modal, FormMode::SlideOver, or FormMode::Page
+    fn form_mode(&self) -> FormMode {
+        FormMode::SlideOver // Renders a right-anchored slide-in drawer
+    }
+}
+```
+
+- **`FormMode::Modal`**: Centered dialog modal, ideal for quick 2-3 field actions.
+- **`FormMode::SlideOver`**: Smooth off-canvas drawer anchored on the right edge, perfect for dense forms without losing table context.
+- **`FormMode::Page`**: Dedicated full-page route at `/admin/:slug/create` and `/admin/:slug/edit/:id` with breadcrumb navigation.
+
+---
+
+## 🔍 Fluent Table Filters & Customizable Styles
+
+Easily add dropdown filter menus and customize row presentation:
+
+```rust
+Table::new()
+    .striped() // or .compact()
+    .filter(TableFilter::select("role", "Role", vec![
+        ("Admin", "Admin"),
+        ("Editor", "Editor"),
+        ("Member", "Member"),
+    ]))
+    .filter(TableFilter::select("status", "Status", vec![
+        ("Active", "Active"),
+        ("Pending", "Pending"),
+    ]))
+```
+
+---
+
+## ⚡ Native Searchable Select Dropdowns (Select2-Style)
+
+Select from long lists with zero external JavaScript dependencies or npm bloat:
+
+```rust
+Form::new()
+    .field(FormField::searchable_select("assignee", vec![
+        ("1", "Pratik Bhujel (Superadmin)"),
+        ("2", "Dharma Raj Shrestha (Admin)"),
+        ("3", "Lasta Chaudhary (Editor)"),
+    ]))
+```
+
+---
+
+## 🔐 OAuth SSO & Role Switcher
+
+In addition to email/password authentication, OxideAdmin supports single-sign-on (SSO) integration with GitHub OAuth (`/admin/oauth/github`), as well as a one-click demo role switcher to test permission levels on the fly.
+
+---
+
 ## 🏃 Running the Demo
 
 Clone the repo and run:
@@ -210,11 +279,15 @@ Demo accounts (password for all: `admin123`):
 
 - [x] Axum 0.7 routing and session cookie authentication
 - [x] Repository pattern with SQLite persistence (`rusqlite`)
-- [x] Server-rendered HTML5 dialog modals (Create, Edit, Delete)
+- [x] Executive KPI operations dashboard (`/admin/dashboard`)
+- [x] Server-rendered dialog modals, slide-over drawers, and full-page forms (`FormMode`)
+- [x] Fluent table filters and custom styling (`TableStyle::Striped`, `TableStyle::Compact`)
+- [x] Native searchable select dropdowns (`FormField::searchable_select`)
 - [x] Live debounced search and pagination
 - [x] Role-Based Access Control (RBAC) with declarative resource policies
 - [x] Permission-driven UI rendering with 403 Forbidden security guards
 - [x] Activity audit trail logging with SQLite persistence (`AuditLogResource`)
+- [x] GitHub OAuth SSO integration
 - [ ] Procedural macro `#[derive(Resource)]` to eliminate boilerplate
 - [ ] PostgreSQL and SeaORM repository adapters
 - [ ] Bulk actions and CSV export queue

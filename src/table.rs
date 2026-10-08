@@ -94,10 +94,37 @@ impl TableAction {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableStyle {
+    #[default]
+    Default,
+    Striped,
+    Compact,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableFilter {
+    pub name: String,
+    pub label: String,
+    pub options: Vec<(String, String)>,
+}
+
+impl TableFilter {
+    pub fn select(name: impl Into<String>, label: impl Into<String>, options: Vec<(&str, &str)>) -> Self {
+        Self {
+            name: name.into(),
+            label: label.into(),
+            options: options.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Table {
     pub columns: Vec<Column>,
     pub actions: Vec<TableAction>,
+    pub filters: Vec<TableFilter>,
+    pub style: TableStyle,
     pub default_sort_by: Option<String>,
     pub default_page_size: usize,
 }
@@ -107,6 +134,8 @@ impl Table {
         Self {
             columns: Vec::new(),
             actions: Vec::new(),
+            filters: Vec::new(),
+            style: TableStyle::Default,
             default_sort_by: None,
             default_page_size: 10,
         }
@@ -119,6 +148,26 @@ impl Table {
 
     pub fn action(mut self, action: TableAction) -> Self {
         self.actions.push(action);
+        self
+    }
+
+    pub fn filter(mut self, filter: TableFilter) -> Self {
+        self.filters.push(filter);
+        self
+    }
+
+    pub fn style(mut self, style: TableStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn striped(mut self) -> Self {
+        self.style = TableStyle::Striped;
+        self
+    }
+
+    pub fn compact(mut self) -> Self {
+        self.style = TableStyle::Compact;
         self
     }
 
