@@ -386,41 +386,55 @@ let session = redis.get("session:123");
 
 ## 🛠️ The `oxi` CLI Tool (Artisan-Grade Scaffolding)
 
-OxideAdmin ships with `oxi`, an Artisan-inspired command-line assistant:
+OxideAdmin ships with `oxi`, an Artisan-inspired command-line assistant. You can install it globally to your `$PATH` or run it as a Cargo subcommand:
+
+```bash
+# Install globally to your system (into ~/.cargo/bin)
+cargo install --path . --bin oxi
+# Or install directly from GitHub:
+# cargo install --git https://github.com/prateekbhujel/oxide-admin oxi
+```
+
+Once installed, use `oxi` anywhere in your terminal just like Laravel's `artisan`:
 
 ```bash
 # Scaffold a new Filament-style Resource with columns, form fields, and policy hooks
-cargo run --bin oxi -- make:resource Product
+oxi make:resource Product
 
 # Scaffold a domain Model with camelCase Serde serialization
-cargo run --bin oxi -- make:model Customer
+oxi make:model Customer
 
 # Scaffold a SQLite repository interface and implementation
-cargo run --bin oxi -- make:repo Product
+oxi make:repo Product
 
 # Generate timestamped SQL migration files
-cargo run --bin oxi -- make:migration create_products_table
+oxi make:migration create_products_table
 
 # Run database migrations and inspect SQLite schema
-cargo run --bin oxi -- migrate
-cargo run --bin oxi -- db:tables
+oxi migrate
+oxi db:tables
 
 # Seed demo accounts and test data
-cargo run --bin oxi -- db:seed
+oxi db:seed
 
 # Scaffold background jobs and transactional mailers
-cargo run --bin oxi -- make:job ProcessPayment
-cargo run --bin oxi -- make:mail OrderShipped
+oxi make:job ProcessPayment
+oxi make:mail OrderShipped
 
 # Flush application and Redis cache stores
-cargo run --bin oxi -- cache:clear
+oxi cache:clear
 
 # List all registered admin routes and headless JSON API endpoints
-cargo run --bin oxi -- routes
+oxi routes
+
+# Start real-time WebSocket server
+oxi ws:serve
 
 # Preview theme colors, palette hex values, and typography
-cargo run --bin oxi -- theme:preview
+oxi theme:preview
 ```
+
+*(You can also run commands via `cargo oxi <command>`, e.g., `cargo oxi make:resource Product`)*
 
 ---
 

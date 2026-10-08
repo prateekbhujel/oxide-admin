@@ -3,7 +3,12 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let mut raw_args: Vec<String> = env::args().collect();
+    // Handle cargo subcommand invocation (`cargo oxi ...`)
+    if raw_args.get(1).map(|s| s.as_str()) == Some("oxi") {
+        raw_args.remove(1);
+    }
+    let args = raw_args;
     let command = args.get(1).map(|s| s.as_str()).unwrap_or("help");
 
     match command {
