@@ -189,6 +189,10 @@ pub fn render_page(
                 <span class="text-zinc-200 font-medium">{title}</span>
             </div>
             <div class="flex items-center gap-2.5">
+                <div id="live-presence-indicator" class="hidden items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono transition-all">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="presence-text">Live Sync</span>
+                </div>
                 <span class="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-700/80 bg-zinc-850 text-zinc-300">{user_role}</span>
                 <span class="text-xs text-zinc-500 font-mono">⌘K</span>
             </div>
@@ -305,6 +309,83 @@ pub fn render_page(
             if (dlg) dlg.showModal();
         }}
 
+        // Bulk & Row Actions JavaScript Helpers
+        function toggleSelectAll(master) {{
+            const checkboxes = document.querySelectorAll('.row-select-checkbox');
+            checkboxes.forEach(cb => {{ cb.checked = master.checked; }});
+            updateBulkToolbar();
+        }}
+
+        function onRowCheckboxChange() {{
+            const checkboxes = document.querySelectorAll('.row-select-checkbox');
+            const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+            const master = document.getElementById('select-all-checkbox');
+            if (master) master.checked = allChecked;
+            updateBulkToolbar();
+        }}
+
+        function getSelectedRowIds() {{
+            const checkboxes = document.querySelectorAll('.row-select-checkbox:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }}
+
+        function updateBulkToolbar() {{
+            const selected = getSelectedRowIds();
+            const toolbar = document.getElementById('bulk-actions-toolbar');
+            const countSpan = document.getElementById('selected-count');
+            if (toolbar) {{
+                if (selected.length > 0) {{
+                    toolbar.classList.remove('hidden');
+                    toolbar.classList.add('flex');
+                    if (countSpan) countSpan.textContent = selected.length + ' selected';
+                }} else {{
+                    toolbar.classList.add('hidden');
+                    toolbar.classList.remove('flex');
+                }}
+            }}
+        }}
+
+        function executeRowAction(slug, actionId, id, requiresConfirm, heading, desc) {{
+            if (requiresConfirm && !confirm(desc || 'Are you sure you want to execute this action?')) {{
+                return;
+            }}
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/admin/' + slug + '/action/' + actionId + '/' + id;
+            document.body.appendChild(form);
+            form.submit();
+        }}
+
+        function executeBulkAction(slug, actionId, requiresConfirm, heading, desc) {{
+            const selected = getSelectedRowIds();
+            if (selected.length === 0) {{
+                alert('Please select at least one record.');
+                return;
+            }}
+            if (requiresConfirm && !confirm(desc || ('Are you sure you want to execute this action on ' + selected.length + ' selected records?'))) {{
+                return;
+            }}
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/admin/' + slug + '/bulk-action/' + actionId;
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'ids';
+            input.value = selected.join(',');
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        }}
+
+        function executeBulkExport(slug, format) {{
+            const selected = getSelectedRowIds();
+            let url = '/admin/' + slug + '/export?format=' + format;
+            if (selected.length > 0) {{
+                url += '&ids=' + encodeURIComponent(selected.join(','));
+            }}
+            window.location.href = url;
+        }}
+
         // Auto dismiss flash toast
         setTimeout(() => {{
             const t = document.getElementById('flash-toast');
@@ -316,11 +397,29 @@ pub fn render_page(
             try {{
                 const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const socket = new WebSocket(proto + '//' + window.location.host + '/admin/ws');
+                const indicator = document.getElementById('live-presence-indicator');
+                const presenceText = document.getElementById('presence-text');
+
+                socket.onopen = function() {{
+                    if (indicator) {{
+                        indicator.classList.remove('hidden');
+                        indicator.classList.add('flex');
+                    }}
+                }};
+
                 socket.onmessage = function(event) {{
                     try {{
                         const payload = JSON.parse(event.data);
                         const pathParts = window.location.pathname.split('/');
                         const currentSlug = pathParts[2];
+
+                        if (presenceText && payload.event) {{
+                            presenceText.textContent = payload.event;
+                            setTimeout(() => {{
+                                if (presenceText) presenceText.textContent = 'Live Sync';
+                            }}, 3000);
+                        }}
+
                         if (currentSlug && (payload.channel === 'admin' || payload.channel === currentSlug)) {{
                             if (typeof updateTable === 'function') {{
                                 updateTable(currentSlug);
@@ -328,7 +427,12 @@ pub fn render_page(
                         }}
                     }} catch(e) {{}}
                 }};
+
                 socket.onclose = function() {{
+                    if (indicator) {{
+                        indicator.classList.add('hidden');
+                        indicator.classList.remove('flex');
+                    }}
                     setTimeout(initWebSocket, 4000);
                 }};
             }} catch(err) {{}}

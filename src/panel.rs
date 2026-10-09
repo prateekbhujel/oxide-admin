@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use axum::{
     extract::{Form, Path, Query},
-    http::header::{COOKIE, SET_COOKIE},
+    http::header::{CONTENT_DISPOSITION, CONTENT_TYPE, COOKIE, SET_COOKIE},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -49,6 +49,17 @@ pub struct TableQuery {
 pub struct LoginForm {
     pub email: Option<String>,
     pub password: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExportQuery {
+    pub format: Option<String>,
+    pub ids: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkActionForm {
+    pub ids: Option<String>,
 }
 
 impl AdminPanel {
@@ -194,6 +205,18 @@ impl AdminPanel {
             .route("/:slug/delete/:id", post({
                 let panel = shared_panel.clone();
                 move |headers, path| resource_delete(panel, headers, path)
+            }))
+            .route("/:slug/export", get({
+                let panel = shared_panel.clone();
+                move |headers, path, query| resource_export(panel, headers, path, query)
+            }))
+            .route("/:slug/action/:action_id/:id", post({
+                let panel = shared_panel.clone();
+                move |headers, path| resource_action(panel, headers, path)
+            }))
+            .route("/:slug/bulk-action/:action_id", post({
+                let panel = shared_panel.clone();
+                move |headers, path, form| resource_bulk_action(panel, headers, path, form)
             }))
     }
 }
@@ -726,6 +749,143 @@ async fn resource_delete(
         Err(err) => {
             Redirect::to(&format!("/admin/{slug}?flash=Error:+{}", err.replace(' ', "+"))).into_response()
         }
+    }
+}
+
+async fn resource_export(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    Query(query): Query<ExportQuery>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, Html("<h1>404 Resource Not Found</h1>")).into_response();
+    };
+
+    if !res.canView(&user) {
+        return (StatusCode::FORBIDDEN, Html(layout::render_forbidden_page(&user, res.name()))).into_response();
+    }
+
+    let id_list: Vec<String> = query.ids
+        .map(|s| s.split(',').map(|id| id.trim().to_string()).filter(|id| !id.is_empty()).collect())
+        .unwrap_or_default();
+
+    let fmt = query.format.unwrap_or_else(|| "csv".to_string());
+    match res.bulk_export(&id_list, &fmt) {
+        Ok(data) => {
+            let (mime, ext) = if fmt.eq_ignore_ascii_case("json") {
+                ("application/json; charset=utf-8", "json")
+            } else {
+                ("text/csv; charset=utf-8", "csv")
+            };
+            let filename = format!("{}-export.{}", slug, ext);
+            (
+                StatusCode::OK,
+                [
+                    (CONTENT_TYPE, mime),
+                    (
+                        CONTENT_DISPOSITION,
+                        &format!("attachment; filename=\"{}\"", filename),
+                    ),
+                ],
+                data,
+            )
+                .into_response()
+        }
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(format!("<h1>Export error: {}</h1>", err)),
+        )
+            .into_response(),
+    }
+}
+
+async fn resource_action(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path((slug, action_id, id)): Path<(String, String, String)>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, Html("<h1>404 Resource Not Found</h1>")).into_response();
+    };
+
+    if !res.canEdit(&user) {
+        return (StatusCode::FORBIDDEN, Html(layout::render_forbidden_page(&user, res.name()))).into_response();
+    }
+
+    match res.handle_action(&action_id, &id) {
+        Ok(msg) => {
+            panel.broadcast(
+                "admin",
+                "record:action",
+                serde_json::json!({ "slug": &slug, "id": &id, "action": &action_id }),
+            );
+            panel.broadcast(&slug, "action", serde_json::json!({ "id": &id, "action": &action_id }));
+            let flash = if msg.is_empty() {
+                format!("Action `{}` completed", action_id)
+            } else {
+                msg
+            };
+            Redirect::to(&format!("/admin/{}?flash={}", slug, flash.replace(' ', "+"))).into_response()
+        }
+        Err(err) => Redirect::to(&format!(
+            "/admin/{}?flash=Error:+{}",
+            slug,
+            err.replace(' ', "+")
+        ))
+        .into_response(),
+    }
+}
+
+async fn resource_bulk_action(
+    panel: Arc<AdminPanel>,
+    headers: HeaderMap,
+    Path((slug, action_id)): Path<(String, String)>,
+    Form(form): Form<BulkActionForm>,
+) -> Response {
+    let user = match get_authenticated_user(&panel, &headers) {
+        Some(u) => u,
+        None => return Redirect::to("/admin/login").into_response(),
+    };
+
+    let Some(res) = panel.resource_map.get(&slug) else {
+        return (StatusCode::NOT_FOUND, Html("<h1>404 Resource Not Found</h1>")).into_response();
+    };
+
+    if !res.canEdit(&user) {
+        return (StatusCode::FORBIDDEN, Html(layout::render_forbidden_page(&user, res.name()))).into_response();
+    }
+
+    let id_list: Vec<String> = form.ids
+        .map(|s| s.split(',').map(|id| id.trim().to_string()).filter(|id| !id.is_empty()).collect())
+        .unwrap_or_default();
+
+    match res.handle_bulk_action(&action_id, &id_list) {
+        Ok(msg) => {
+            panel.broadcast(
+                "admin",
+                "record:bulk_action",
+                serde_json::json!({ "slug": &slug, "action": &action_id, "count": id_list.len() }),
+            );
+            panel.broadcast(&slug, "bulk_action", serde_json::json!({ "action": &action_id, "count": id_list.len() }));
+            Redirect::to(&format!("/admin/{}?flash={}", slug, msg.replace(' ', "+"))).into_response()
+        }
+        Err(err) => Redirect::to(&format!(
+            "/admin/{}?flash=Error:+{}",
+            slug,
+            err.replace(' ', "+")
+        ))
+        .into_response(),
     }
 }
 

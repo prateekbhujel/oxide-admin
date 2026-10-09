@@ -29,6 +29,33 @@ impl Column {
         }
     }
 
+    pub fn numeric(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            label: crate::resource::headline(&name),
+            name,
+            column_type: ColumnType::Numeric,
+            sortable: false,
+            searchable: false,
+        }
+    }
+
+    pub fn date_time(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            label: crate::resource::headline(&name),
+            name,
+            column_type: ColumnType::DateTime,
+            sortable: false,
+            searchable: false,
+        }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn dateTime(name: impl Into<String>) -> Self {
+        Self::date_time(name)
+    }
+
     pub fn badge(name: impl Into<String>, colors: Vec<(&str, &str)>) -> Self {
         let name = name.into();
         Self {
@@ -58,39 +85,274 @@ impl Column {
     }
 }
 
+/// Filament-grade Row Action
 #[derive(Debug, Clone)]
-pub struct TableAction {
+pub struct Action {
     pub id: String,
     pub label: String,
-    pub style: ActionStyle,
-    pub confirmation: Option<String>,
+    pub icon: Option<String>,
+    pub color: String,
+    pub requires_confirmation: bool,
+    pub modal_heading: Option<String>,
+    pub modal_description: Option<String>,
+    pub action_url: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-pub enum ActionStyle {
-    Default,
-    Primary,
-    Danger,
-}
+pub type TableAction = Action;
 
-impl TableAction {
+impl Action {
+    pub fn make(id: impl Into<String>) -> Self {
+        let id_str = id.into();
+        let label = crate::resource::headline(&id_str);
+        Self {
+            id: id_str,
+            label,
+            icon: None,
+            color: "zinc".to_string(),
+            requires_confirmation: false,
+            modal_heading: None,
+            modal_description: None,
+            action_url: None,
+        }
+    }
+
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
-            style: ActionStyle::Default,
-            confirmation: None,
+            icon: None,
+            color: "zinc".to_string(),
+            requires_confirmation: false,
+            modal_heading: None,
+            modal_description: None,
+            action_url: None,
         }
     }
 
+    /// Prebuilt Filament View Action
+    pub fn view() -> Self {
+        Self::make("view")
+            .label("View")
+            .icon("eye")
+            .color("zinc")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeView() -> Self {
+        Self::view()
+    }
+
+    /// Prebuilt Filament Edit Action
+    pub fn edit() -> Self {
+        Self::make("edit")
+            .label("Edit")
+            .icon("pencil")
+            .color("zinc")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeEdit() -> Self {
+        Self::edit()
+    }
+
+    /// Prebuilt Filament Delete Action
+    pub fn delete() -> Self {
+        Self::make("delete")
+            .label("Delete")
+            .icon("trash")
+            .color("rose")
+            .requires_confirmation(true)
+            .modal_heading("Delete Record")
+            .modal_description("Are you sure you want to delete this record? This action cannot be undone.")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeDelete() -> Self {
+        Self::delete()
+    }
+
+    /// Prebuilt Filament Replicate Action (Duplicate record)
+    pub fn replicate() -> Self {
+        Self::make("replicate")
+            .label("Duplicate")
+            .icon("copy")
+            .color("indigo")
+            .requires_confirmation(true)
+            .modal_heading("Duplicate Record")
+            .modal_description("A duplicate of this record will be created with cloned attributes.")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeReplicate() -> Self {
+        Self::replicate()
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    pub fn icon(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    pub fn color(mut self, color: impl Into<String>) -> Self {
+        self.color = color.into();
+        self
+    }
+
     pub fn danger(mut self) -> Self {
-        self.style = ActionStyle::Danger;
+        self.color = "rose".to_string();
         self
     }
 
     pub fn confirm(mut self, message: impl Into<String>) -> Self {
-        self.confirmation = Some(message.into());
+        self.requires_confirmation = true;
+        self.modal_description = Some(message.into());
         self
+    }
+
+    pub fn requires_confirmation(mut self, requires: bool) -> Self {
+        self.requires_confirmation = requires;
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn requiresConfirmation(self) -> Self {
+        self.requires_confirmation(true)
+    }
+
+    pub fn modal_heading(mut self, heading: impl Into<String>) -> Self {
+        self.modal_heading = Some(heading.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn modalHeading(self, heading: impl Into<String>) -> Self {
+        self.modal_heading(heading)
+    }
+
+    pub fn modal_description(mut self, desc: impl Into<String>) -> Self {
+        self.modal_description = Some(desc.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn modalDescription(self, desc: impl Into<String>) -> Self {
+        self.modal_description(desc)
+    }
+
+    pub fn action_url(mut self, url: impl Into<String>) -> Self {
+        self.action_url = Some(url.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn actionUrl(self, url: impl Into<String>) -> Self {
+        self.action_url(url)
+    }
+}
+
+/// Filament-grade Bulk Action
+#[derive(Debug, Clone)]
+pub struct BulkAction {
+    pub id: String,
+    pub label: String,
+    pub icon: Option<String>,
+    pub color: String,
+    pub requires_confirmation: bool,
+    pub modal_heading: Option<String>,
+    pub modal_description: Option<String>,
+}
+
+impl BulkAction {
+    pub fn make(id: impl Into<String>) -> Self {
+        let id_str = id.into();
+        let label = crate::resource::headline(&id_str);
+        Self {
+            id: id_str,
+            label,
+            icon: None,
+            color: "zinc".to_string(),
+            requires_confirmation: false,
+            modal_heading: None,
+            modal_description: None,
+        }
+    }
+
+    /// Prebuilt Filament Delete Bulk Action
+    pub fn delete() -> Self {
+        Self::make("delete")
+            .label("Delete Selected")
+            .icon("trash")
+            .color("rose")
+            .requires_confirmation(true)
+            .modal_heading("Delete Selected Records")
+            .modal_description("Are you sure you want to permanently delete all selected records?")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeDelete() -> Self {
+        Self::delete()
+    }
+
+    /// Prebuilt Filament Streaming Export Bulk Action
+    pub fn export() -> Self {
+        Self::make("export")
+            .label("Export CSV")
+            .icon("download")
+            .color("emerald")
+    }
+
+    #[allow(non_snake_case)]
+    pub fn makeExport() -> Self {
+        Self::export()
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    pub fn icon(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    pub fn color(mut self, color: impl Into<String>) -> Self {
+        self.color = color.into();
+        self
+    }
+
+    pub fn requires_confirmation(mut self, requires: bool) -> Self {
+        self.requires_confirmation = requires;
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn requiresConfirmation(self) -> Self {
+        self.requires_confirmation(true)
+    }
+
+    pub fn modal_heading(mut self, heading: impl Into<String>) -> Self {
+        self.modal_heading = Some(heading.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn modalHeading(self, heading: impl Into<String>) -> Self {
+        self.modal_heading(heading)
+    }
+
+    pub fn modal_description(mut self, desc: impl Into<String>) -> Self {
+        self.modal_description = Some(desc.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn modalDescription(self, desc: impl Into<String>) -> Self {
+        self.modal_description(desc)
     }
 }
 
@@ -122,11 +384,14 @@ impl TableFilter {
 #[derive(Debug, Clone)]
 pub struct Table {
     pub columns: Vec<Column>,
-    pub actions: Vec<TableAction>,
+    pub actions: Vec<Action>,
+    pub bulk_actions: Vec<BulkAction>,
     pub filters: Vec<TableFilter>,
     pub style: TableStyle,
     pub default_sort_by: Option<String>,
     pub default_page_size: usize,
+    pub empty_state_heading: Option<String>,
+    pub empty_state_description: Option<String>,
 }
 
 impl Table {
@@ -134,10 +399,13 @@ impl Table {
         Self {
             columns: Vec::new(),
             actions: Vec::new(),
+            bulk_actions: Vec::new(),
             filters: Vec::new(),
             style: TableStyle::Default,
             default_sort_by: None,
             default_page_size: 10,
+            empty_state_heading: None,
+            empty_state_description: None,
         }
     }
 
@@ -146,13 +414,48 @@ impl Table {
         self
     }
 
-    pub fn action(mut self, action: TableAction) -> Self {
+    pub fn columns(mut self, cols: Vec<Column>) -> Self {
+        self.columns.extend(cols);
+        self
+    }
+
+    pub fn action(mut self, action: Action) -> Self {
         self.actions.push(action);
         self
     }
 
+    pub fn actions(mut self, actions: Vec<Action>) -> Self {
+        self.actions = actions;
+        self
+    }
+
+    pub fn bulk_action(mut self, action: BulkAction) -> Self {
+        self.bulk_actions.push(action);
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn bulkAction(self, action: BulkAction) -> Self {
+        self.bulk_action(action)
+    }
+
+    pub fn bulk_actions(mut self, actions: Vec<BulkAction>) -> Self {
+        self.bulk_actions = actions;
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn bulkActions(self, actions: Vec<BulkAction>) -> Self {
+        self.bulk_actions(actions)
+    }
+
     pub fn filter(mut self, filter: TableFilter) -> Self {
         self.filters.push(filter);
+        self
+    }
+
+    pub fn filters(mut self, filters: Vec<TableFilter>) -> Self {
+        self.filters = filters;
         self
     }
 
@@ -176,16 +479,39 @@ impl Table {
         self
     }
 
-    // Laravel-style camelCase aliases
     #[allow(non_snake_case)]
     pub fn pageSize(self, size: usize) -> Self {
         self.page_size(size)
     }
 
-    #[allow(non_snake_case)]
-    pub fn defaultSortBy(mut self, sort_by: impl Into<String>) -> Self {
+    pub fn default_sort_by(mut self, sort_by: impl Into<String>) -> Self {
         self.default_sort_by = Some(sort_by.into());
         self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn defaultSortBy(self, sort_by: impl Into<String>) -> Self {
+        self.default_sort_by(sort_by)
+    }
+
+    pub fn empty_state_heading(mut self, heading: impl Into<String>) -> Self {
+        self.empty_state_heading = Some(heading.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn emptyStateHeading(self, heading: impl Into<String>) -> Self {
+        self.empty_state_heading(heading)
+    }
+
+    pub fn empty_state_description(mut self, desc: impl Into<String>) -> Self {
+        self.empty_state_description = Some(desc.into());
+        self
+    }
+
+    #[allow(non_snake_case)]
+    pub fn emptyStateDescription(self, desc: impl Into<String>) -> Self {
+        self.empty_state_description(desc)
     }
 }
 

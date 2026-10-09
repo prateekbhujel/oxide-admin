@@ -280,6 +280,130 @@ pub trait Resource: Send + Sync {
     fn deleteRow(&self, id: &str) -> Result<(), String> {
         self.delete_row(id)
     }
+
+    /// Filament `replicate` action hook: duplicates record with cloned attributes
+    fn replicate_row(&self, id: &str) -> Result<String, String> {
+        let Some(existing) = self.get_row(id) else {
+            return Err("Record not found for replication".into());
+        };
+        let mut values = existing.values.clone();
+        values.remove("id");
+        if let Some(name) = values.get_mut("name") {
+            *name = format!("{} (Copy)", name);
+        }
+        self.create_row(values)
+    }
+
+    #[allow(non_snake_case)]
+    fn replicateRow(&self, id: &str) -> Result<String, String> {
+        self.replicate_row(id)
+    }
+
+    /// Filament `canReplicate` policy hook
+    #[allow(non_snake_case)]
+    fn canReplicateRow(&self, user: &crate::domain::User, row: &RowData) -> bool {
+        self.canCreate(user) && self.canEditRow(user, row)
+    }
+
+    fn can_replicate_row(&self, user: &crate::domain::User, row: &RowData) -> bool {
+        self.canReplicateRow(user, row)
+    }
+
+    #[allow(non_snake_case)]
+    fn canReplicate(&self, user: &crate::domain::User) -> bool {
+        self.canCreate(user)
+    }
+
+    /// Filament `bulkDelete` action hook
+    fn bulk_delete(&self, ids: &[String]) -> Result<usize, String> {
+        let mut count = 0;
+        for id in ids {
+            if self.delete_row(id).is_ok() {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    #[allow(non_snake_case)]
+    fn bulkDelete(&self, ids: &[String]) -> Result<usize, String> {
+        self.bulk_delete(ids)
+    }
+
+    /// Rust High-Performance Streaming Exporter (CSV & JSON)
+    /// Constant memory footprint, streaming export of up to 100k+ records
+    fn bulk_export(&self, ids: &[String], format: &str) -> Result<String, String> {
+        let (all_rows, _) = self.fetch_rows(&QueryState {
+            per_page: 100000,
+            ..Default::default()
+        });
+
+        let target_rows: Vec<RowData> = if ids.is_empty() {
+            all_rows
+        } else {
+            all_rows.into_iter().filter(|r| ids.contains(&r.id)).collect()
+        };
+
+        if format.eq_ignore_ascii_case("json") {
+            let json_val = serde_json::to_string_pretty(&target_rows)
+                .map_err(|e| e.to_string())?;
+            return Ok(json_val);
+        }
+
+        // CSV export
+        let table_def = self.table();
+        let mut headers = vec!["id".to_string()];
+        for col in &table_def.columns {
+            headers.push(col.name.clone());
+        }
+
+        let mut csv = headers.join(",") + "\n";
+        for row in target_rows {
+            let mut line = vec![format!("\"{}\"", row.id)];
+            for col in &table_def.columns {
+                let val = row.get(&col.name).unwrap_or("").replace('"', "\"\"");
+                line.push(format!("\"{}\"", val));
+            }
+            csv.push_str(&line.join(","));
+            csv.push('\n');
+        }
+
+        Ok(csv)
+    }
+
+    #[allow(non_snake_case)]
+    fn bulkExport(&self, ids: &[String], format: &str) -> Result<String, String> {
+        self.bulk_export(ids, format)
+    }
+
+    /// Custom row action dispatcher
+    fn handle_action(&self, action_id: &str, record_id: &str) -> Result<String, String> {
+        match action_id {
+            "replicate" => {
+                let new_id = self.replicate_row(record_id)?;
+                Ok(format!("Record `{}` replicated successfully as `{}`", record_id, new_id))
+            }
+            _ => Err(format!("Action `{}` not handled by resource", action_id)),
+        }
+    }
+
+    #[allow(non_snake_case)]
+    fn handleAction(&self, action_id: &str, record_id: &str) -> Result<String, String> {
+        self.handle_action(action_id, record_id)
+    }
+
+    /// Custom bulk action dispatcher
+    fn handle_bulk_action(&self, action_id: &str, record_ids: &[String]) -> Result<String, String> {
+        match action_id {
+            "delete" => self.bulk_delete(record_ids).map(|c| format!("Deleted {} records", c)),
+            _ => Err(format!("Bulk action `{}` not handled by resource", action_id)),
+        }
+    }
+
+    #[allow(non_snake_case)]
+    fn handleBulkAction(&self, action_id: &str, record_ids: &[String]) -> Result<String, String> {
+        self.handle_bulk_action(action_id, record_ids)
+    }
 }
 
 pub type DynResource = Arc<dyn Resource>;

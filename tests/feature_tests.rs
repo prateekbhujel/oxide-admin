@@ -491,4 +491,289 @@ async fn test_websocket_broadcaster_pubsub() {
     expect(msg2.data["amount"].as_i64().unwrap()).to_be(450);
 }
 
+struct FilamentParityResource {
+    records: std::sync::Mutex<HashMap<String, HashMap<String, String>>>,
+}
+
+impl FilamentParityResource {
+    fn new() -> Self {
+        let mut map = HashMap::new();
+        let mut r1 = HashMap::new();
+        r1.insert("name".to_string(), "MacBook Pro".to_string());
+        r1.insert("price".to_string(), "1999".to_string());
+        let mut r2 = HashMap::new();
+        r2.insert("name".to_string(), "Studio Display".to_string());
+        r2.insert("price".to_string(), "1599".to_string());
+        map.insert("1".to_string(), r1);
+        map.insert("2".to_string(), r2);
+        Self {
+            records: std::sync::Mutex::new(map),
+        }
+    }
+}
+
+impl Resource for FilamentParityResource {
+    fn name(&self) -> &str { "Product" }
+    fn plural_name(&self) -> &str { "Products" }
+    fn slug(&self) -> &str { "products" }
+
+    fn table(&self) -> Table {
+        Table::new()
+            .columns(vec![
+                Column::text("name").label("Product Name").sortable(),
+                Column::numeric("price").label("Price").sortable(),
+            ])
+            .actions(vec![
+                Action::view(),
+                Action::edit(),
+                Action::replicate(),
+                Action::delete(),
+                Action::make("publish")
+                    .label("Publish Now")
+                    .icon("check")
+                    .color("emerald")
+                    .requiresConfirmation()
+                    .modalHeading("Publish Product")
+                    .modalDescription("Are you sure you want to make this product live?"),
+            ])
+            .bulkActions(vec![
+                BulkAction::export(),
+                BulkAction::delete(),
+                BulkAction::make("archive")
+                    .label("Archive Selected")
+                    .color("amber")
+                    .requiresConfirmation()
+                    .modalHeading("Archive Records")
+                    .modalDescription("Archive all selected items?"),
+            ])
+            .emptyStateHeading("No products in inventory")
+            .emptyStateDescription("Add your first product to get started.")
+    }
+
+    fn fetch_rows(&self, _query: &QueryState) -> (Vec<RowData>, usize) {
+        let guard = self.records.lock().unwrap();
+        let mut rows = Vec::new();
+        let mut ids: Vec<_> = guard.keys().cloned().collect();
+        ids.sort();
+        for id in ids {
+            if let Some(map) = guard.get(&id) {
+                let mut row = RowData::new(&id);
+                for (k, v) in map {
+                    row.values.insert(k.clone(), v.clone());
+                }
+                rows.push(row);
+            }
+        }
+        let len = rows.len();
+        (rows, len)
+    }
+
+    fn get_row(&self, id: &str) -> Option<RowData> {
+        let guard = self.records.lock().unwrap();
+        guard.get(id).map(|map| {
+            let mut row = RowData::new(id);
+            for (k, v) in map {
+                row.values.insert(k.clone(), v.clone());
+            }
+            row
+        })
+    }
+
+    fn create_row(&self, values: HashMap<String, String>) -> Result<String, String> {
+        let mut guard = self.records.lock().unwrap();
+        let next_id = (guard.len() + 1).to_string();
+        guard.insert(next_id.clone(), values);
+        Ok(next_id)
+    }
+
+    fn delete_row(&self, id: &str) -> Result<(), String> {
+        let mut guard = self.records.lock().unwrap();
+        guard.remove(id);
+        Ok(())
+    }
+}
+
+#[test]
+fn test_filament_actions_and_replicate_row() {
+    let res = FilamentParityResource::new();
+
+    // Verify Action builder with strict camelCase and fluent methods
+    let custom_action = Action::make("duplicate")
+        .label("Clone Product")
+        .icon("copy")
+        .color("indigo")
+        .requiresConfirmation()
+        .modalHeading("Clone this item")
+        .modalDescription("Are you sure you want to clone this item?")
+        .actionUrl("/custom/url");
+
+    expect(&custom_action.id).to_be("duplicate");
+    expect(&custom_action.label).to_be("Clone Product");
+    expect(&custom_action.color).to_be("indigo");
+    assert!(custom_action.requires_confirmation);
+    expect(custom_action.modal_heading.as_deref().unwrap()).to_be("Clone this item");
+    expect(custom_action.action_url.as_deref().unwrap()).to_be("/custom/url");
+
+    // Test record replication hook (Filament replicate)
+    let new_id = res.replicateRow("1").expect("Replication should succeed");
+    let cloned_record = res.get_row(&new_id).expect("Cloned record should exist");
+    expect(cloned_record.get("name").unwrap()).to_be("MacBook Pro (Copy)");
+    expect(cloned_record.get("price").unwrap()).to_be("1999");
+
+    // Test row action dispatcher
+    let action_msg = res.handleAction("replicate", "2").expect("Dispatcher replicate should succeed");
+    assert!(action_msg.contains("replicated successfully"));
+
+    let (_, total) = res.fetch_rows(&QueryState::default());
+    assert_eq!(total, 4); // 2 original + 2 replicated
+}
+
+#[test]
+fn test_bulk_delete_and_streaming_export() {
+    let res = FilamentParityResource::new();
+
+    // Verify BulkAction builder with strict camelCase
+    let bulk_act = BulkAction::make("archive")
+        .label("Archive Selected")
+        .color("amber")
+        .requiresConfirmation()
+        .modalHeading("Confirm Archive")
+        .modalDescription("Selected records will be archived.");
+
+    expect(&bulk_act.id).to_be("archive");
+    expect(&bulk_act.label).to_be("Archive Selected");
+    expect(&bulk_act.color).to_be("amber");
+    assert!(bulk_act.requires_confirmation);
+    expect(bulk_act.modal_heading.as_deref().unwrap()).to_be("Confirm Archive");
+
+    // High-performance streaming CSV export
+    let csv_output = res.bulkExport(&["1".to_string(), "2".to_string()], "csv").expect("CSV export should succeed");
+    assert!(csv_output.contains("name,price") || csv_output.contains("price,name"));
+    assert!(csv_output.contains("MacBook Pro"));
+    assert!(csv_output.contains("Studio Display"));
+
+    // High-performance streaming JSON export
+    let json_output = res.bulkExport(&["1".to_string(), "2".to_string()], "json").expect("JSON export should succeed");
+    assert!(json_output.contains("MacBook Pro"));
+    assert!(json_output.contains("Studio Display"));
+    assert!(json_output.starts_with('[') && json_output.ends_with(']'));
+
+    // High-concurrency in-process batch delete
+    let deleted_count = res.bulkDelete(&["1".to_string(), "2".to_string()]).expect("Bulk delete should succeed");
+    assert_eq!(deleted_count, 2);
+
+    let (_, remaining) = res.fetch_rows(&QueryState::default());
+    assert_eq!(remaining, 0);
+}
+
+#[test]
+fn test_form_section_and_field_camel_case_builder() {
+    // Filament-grade Section layout with columns and schema
+    let section = Section::make("General Information")
+        .description("Essential product attributes")
+        .columns(2)
+        .schema(vec![
+            FormField::text("title")
+                .helperText("Enter full product title")
+                .prefix("https://")
+                .suffix(".io")
+                .columnSpan(2),
+            FormField::number("inventory")
+                .defaultValue("50")
+                .min("0")
+                .max("1000")
+                .step("1"),
+            FormField::password("secret_key")
+                .helperText("API secret token")
+                .disabled(),
+            FormField::textarea("description")
+                .rows(5)
+                .placeholder("Markdown supported")
+                .columnSpan(2),
+            FormField::toggle("is_published")
+                .helperText("Toggle live visibility on storefront"),
+            FormField::datetime("scheduled_release")
+                .readOnly(),
+        ]);
+
+    expect(section.title()).to_be("General Information");
+    expect(section.description.as_deref().unwrap()).to_be("Essential product attributes");
+    assert_eq!(section.columns, 2);
+    assert_eq!(section.fields.len(), 6);
+
+    // Verify field builders
+    let title_field = &section.fields[0];
+    expect(title_field.helper_text.as_deref().unwrap()).to_be("Enter full product title");
+    expect(title_field.prefix.as_deref().unwrap()).to_be("https://");
+    expect(title_field.suffix.as_deref().unwrap()).to_be(".io");
+    assert_eq!(title_field.column_span, 2);
+
+    let num_field = &section.fields[1];
+    expect(num_field.default_value.as_deref().unwrap()).to_be("50");
+    expect(num_field.min.as_deref().unwrap()).to_be("0");
+    expect(num_field.max.as_deref().unwrap()).to_be("1000");
+
+    let pwd_field = &section.fields[2];
+    assert!(pwd_field.disabled);
+
+    let desc_field = &section.fields[3];
+    assert_eq!(desc_field.rows, Some(5));
+
+    let dt_field = &section.fields[5];
+    assert!(dt_field.read_only);
+}
+
+#[test]
+fn test_table_view_renders_bulk_actions_and_empty_state() {
+    let res = FilamentParityResource::new();
+    let admin_user = User {
+        id: "1".into(),
+        name: "Admin".into(),
+        email: "admin@example.com".into(),
+        role: Role::Superadmin,
+        status: UserStatus::Active,
+        created_at: "2026-10-08".into(),
+    };
+
+    let query = QueryState::default();
+    let html = oxide_admin::view::table_view::render_table_partial(&res, &query, &admin_user);
+
+    // Checkbox master and row selection
+    assert!(html.contains("id=\"select-all-checkbox\""));
+    assert!(html.contains("class=\"row-select-checkbox"));
+
+    // Bulk actions bar
+    assert!(html.contains("id=\"bulk-actions-toolbar\""));
+    assert!(html.contains("executeBulkExport('products', 'csv')"));
+    assert!(html.contains("executeBulkExport('products', 'json')"));
+    assert!(html.contains("Delete Selected"));
+
+    // Replicate action button
+    assert!(html.contains("executeRowAction('products', 'replicate'"));
+
+    // Custom row action
+    assert!(html.contains("Publish Now"));
+
+    // Empty state test
+    let empty_query = QueryState {
+        search: "Nonexistent".into(),
+        ..Default::default()
+    };
+    struct EmptyResource;
+    impl Resource for EmptyResource {
+        fn name(&self) -> &str { "Order" }
+        fn plural_name(&self) -> &str { "Orders" }
+        fn slug(&self) -> &str { "orders" }
+        fn table(&self) -> Table {
+            Table::new()
+                .emptyStateHeading("No orders found")
+                .emptyStateDescription("No customer orders recorded yet.")
+        }
+        fn fetch_rows(&self, _query: &QueryState) -> (Vec<RowData>, usize) { (vec![], 0) }
+    }
+    let empty_html = oxide_admin::view::table_view::render_table_partial(&EmptyResource, &empty_query, &admin_user);
+    assert!(empty_html.contains("No orders found"));
+    assert!(empty_html.contains("No customer orders recorded yet."));
+}
+
 

@@ -18,6 +18,12 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
 
     // Build Table Header
     let mut header_th = String::new();
+
+    // Checkbox master column
+    header_th.push_str(r#"<th scope="col" class="w-10 px-4 py-3 text-center">
+        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" class="w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-700 text-primary-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+    </th>"#);
+
     for col in &table_def.columns {
         let is_sorted = query.sort_by.as_deref() == Some(&col.name);
         let sort_icon = if is_sorted {
@@ -61,15 +67,22 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
     // Build Table Body Rows
     let mut body_rows = String::new();
     if rows.is_empty() {
-        let cols_len = table_def.columns.len() + 1;
+        let cols_len = table_def.columns.len() + 2;
+        let empty_heading = table_def.empty_state_heading.as_deref().unwrap_or("No records matching criteria.");
+        let empty_desc = table_def.empty_state_description.as_deref().unwrap_or("Try adjusting your search or filters to find what you're looking for.");
         body_rows.push_str(&format!(
-            r#"<tr><td colspan="{cols_len}" class="px-5 py-12 text-center text-zinc-500 text-xs font-mono">
-                <div class="flex flex-col items-center justify-center gap-2">
-                    <svg class="w-6 h-6 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
-                    <span>No records matching criteria.</span>
+            r#"<tr><td colspan="{cols_len}" class="px-5 py-14 text-center text-zinc-500 text-xs">
+                <div class="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                    <div class="w-10 h-10 rounded-xl bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center text-zinc-400 mb-1">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                    </div>
+                    <span class="font-medium text-zinc-200 text-sm">{empty_heading}</span>
+                    <span class="text-zinc-500 text-xs">{empty_desc}</span>
                 </div>
             </td></tr>"#,
-            cols_len = cols_len
+            cols_len = cols_len,
+            empty_heading = empty_heading,
+            empty_desc = empty_desc
         ));
     } else {
         let mode = resource.form_mode();
@@ -77,7 +90,16 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
         for (idx, row) in rows.iter().enumerate() {
             let can_edit = resource.canEditRow(user, row);
             let can_delete = resource.canDeleteRow(user, row);
+            let can_replicate = resource.canReplicateRow(user, row);
             let mut row_tds = String::new();
+
+            // Row selection checkbox
+            row_tds.push_str(&format!(
+                r#"<td class="w-10 px-4 py-3 text-center">
+                    <input type="checkbox" class="row-select-checkbox w-3.5 h-3.5 rounded bg-zinc-800 border-zinc-700 text-primary-500 focus:ring-0 focus:ring-offset-0 cursor-pointer" value="{id}" onchange="onRowCheckboxChange()">
+                </td>"#,
+                id = row.id
+            ));
 
             for col in &table_def.columns {
                 let raw_val = row.get(&col.name).unwrap_or("—");
@@ -85,7 +107,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
                 row_tds.push_str(&format!(r#"<td class="{cell_padding} whitespace-nowrap text-xs text-zinc-200">{rendered_cell}</td>"#));
             }
 
-            // Edit and Delete Actions wired to mode with policy enforcement
+            // Edit, Replicate, Custom Actions, and Delete with policy enforcement
             let row_values_json = serde_json::to_string(&row.values).unwrap_or_else(|_| "{}".to_string());
             let escaped_row_values_json = row_values_json.replace('"', "&quot;");
 
@@ -110,6 +132,37 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
                 };
                 actions_html.push_str(&edit_btn);
             }
+
+            if can_replicate {
+                actions_html.push_str(&format!(
+                    r#"<button type="button" onclick="executeRowAction('{slug}', 'replicate', '{id}', false)" class="p-1 rounded text-zinc-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors" title="Replicate">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    </button>"#,
+                    slug = resource.slug(),
+                    id = row.id
+                ));
+            }
+
+            // Custom table actions
+            for custom_act in &table_def.actions {
+                if custom_act.id != "edit" && custom_act.id != "delete" && custom_act.id != "replicate" && custom_act.id != "view" {
+                    let heading = custom_act.modal_heading.as_deref().unwrap_or(&custom_act.label);
+                    let desc = custom_act.modal_description.as_deref().unwrap_or("");
+                    actions_html.push_str(&format!(
+                        r#"<button type="button" onclick="executeRowAction('{slug}', '{action_id}', '{id}', {req_confirm}, '{heading}', '{desc}')" class="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors" title="{label}">
+                            <span class="text-xs">{label}</span>
+                        </button>"#,
+                        slug = resource.slug(),
+                        action_id = custom_act.id,
+                        id = row.id,
+                        req_confirm = custom_act.requires_confirmation,
+                        heading = heading,
+                        desc = desc,
+                        label = custom_act.label
+                    ));
+                }
+            }
+
             if can_delete {
                 actions_html.push_str(&format!(
                     r#"<button type="button" onclick="openDeleteDialog('{slug}', '{id}')" class="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete">
@@ -119,7 +172,8 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
                     id = row.id
                 ));
             }
-            if !can_edit && !can_delete {
+
+            if actions_html.is_empty() {
                 actions_html = r#"<span class="text-zinc-600 text-xs select-none">—</span>"#.to_string();
             }
 
@@ -169,6 +223,62 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
         String::new()
     };
 
+    // Build Bulk Actions Toolbar HTML
+    let mut bulk_buttons_html = String::new();
+    let bulk_actions = if table_def.bulk_actions.is_empty() {
+        vec![
+            crate::table::BulkAction::export(),
+            crate::table::BulkAction::delete(),
+        ]
+    } else {
+        table_def.bulk_actions.clone()
+    };
+
+    for ba in &bulk_actions {
+        if ba.id == "export" {
+            bulk_buttons_html.push_str(&format!(
+                r#"<button type="button" onclick="executeBulkExport('{slug}', 'csv')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-medium transition-colors">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    <span>Export CSV</span>
+                </button>
+                <button type="button" onclick="executeBulkExport('{slug}', 'json')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-medium transition-colors">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    <span>Export JSON</span>
+                </button>"#,
+                slug = resource.slug()
+            ));
+        } else if ba.id == "delete" {
+            if resource.canDelete(user) {
+                let heading = ba.modal_heading.as_deref().unwrap_or("Delete Selected Records");
+                let desc = ba.modal_description.as_deref().unwrap_or("Are you sure you want to permanently delete all selected records?");
+                bulk_buttons_html.push_str(&format!(
+                    r#"<button type="button" onclick="executeBulkAction('{slug}', 'delete', true, '{heading}', '{desc}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-medium transition-colors">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        <span>{label}</span>
+                    </button>"#,
+                    slug = resource.slug(),
+                    heading = heading,
+                    desc = desc,
+                    label = ba.label
+                ));
+            }
+        } else {
+            let heading = ba.modal_heading.as_deref().unwrap_or(&ba.label);
+            let desc = ba.modal_description.as_deref().unwrap_or("");
+            bulk_buttons_html.push_str(&format!(
+                r#"<button type="button" onclick="executeBulkAction('{slug}', '{id}', {req_confirm}, '{heading}', '{desc}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700 text-xs font-medium transition-colors">
+                    <span>{label}</span>
+                </button>"#,
+                slug = resource.slug(),
+                id = ba.id,
+                req_confirm = ba.requires_confirmation,
+                heading = heading,
+                desc = desc,
+                label = ba.label
+            ));
+        }
+    }
+
     // Build Table Filters HTML
     let mut filters_html = String::new();
     for filter in &table_def.filters {
@@ -189,7 +299,7 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
     }
 
     format!(
-        r#"<!-- Table Controls: Search, Filters & Create -->
+        r#"<!-- Table Controls: Search, Filters, Export & Create -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 gap-3">
             <div class="flex items-center gap-2.5 flex-1 max-w-md">
                 <div class="relative w-full">
@@ -208,9 +318,24 @@ pub fn render_table_partial(resource: &dyn Resource, query: &QueryState, user: &
                 {filters_html}
             </div>
             
-            <div class="flex items-center gap-3 self-end sm:self-auto">
-                <span class="text-[11px] text-zinc-500 font-mono">{total_count} records</span>
+            <div class="flex items-center gap-2.5 self-end sm:self-auto">
+                <span class="text-[11px] text-zinc-500 font-mono mr-1">{total_count} records</span>
+                <a href="/admin/{slug}/export?format=csv" title="Streaming Export CSV" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-850 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 text-xs font-medium transition-colors shadow-sm">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    <span>Export</span>
+                </a>
                 {create_btn_html}
+            </div>
+        </div>
+
+        <!-- Filament-Grade Bulk Actions Toolbar -->
+        <div id="bulk-actions-toolbar" class="hidden items-center justify-between px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs mb-3 shadow-md animate-fade-in">
+            <div class="flex items-center gap-2.5">
+                <span id="selected-count" class="font-mono text-zinc-200 font-semibold px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700">0 selected</span>
+                <span class="text-zinc-400 text-xs">Bulk Actions</span>
+            </div>
+            <div class="flex items-center gap-2">
+                {bulk_buttons_html}
             </div>
         </div>
 
