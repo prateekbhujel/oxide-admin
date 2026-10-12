@@ -52,7 +52,7 @@ pub mod prelude {
     };
     pub use crate::mail::{MailMessage, Mailer};
     pub use crate::module::{ApiResponse, AppModule, DynamicModule, ValidatedRequest};
-    pub use crate::orm::{BelongsTo, Blueprint, DynamicModel, HasMany, Model, ModelQuery, Schema};
+    pub use crate::orm::{BelongsTo, Blueprint, Database, DynamicModel, HasMany, Model, ModelQuery, Schema};
     pub use crate::panel::AdminPanel;
     pub use crate::prompt;
     pub use crate::query::{OrderDir, Query, WhereClause};

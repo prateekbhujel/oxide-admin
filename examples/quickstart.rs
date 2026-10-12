@@ -1,6 +1,5 @@
-use axum::Router;
 use terminus::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct UserResource {
     repo: Arc<dyn UserRepository>,
@@ -71,20 +70,21 @@ impl Resource for UserResource {
 }
 
 #[tokio::main]
-async fn main() {
-    let db_conn = Arc::new(Mutex::new(
-        rusqlite::Connection::open("terminus.db").unwrap(),
-    ));
-
-    let user_repo = Arc::new(SqliteUserRepository::new(db_conn).unwrap());
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Database::open("terminus.db")?;
+    let user_repo = Arc::new(SqliteUserRepository::new(db.connection_arc())?);
 
     let admin = AdminPanel::new()
-        .register(UserResource::new(user_repo));
+        .brand_name("Terminus Admin")
+        .resource(UserResource::new(user_repo));
 
-    let app = Router::new()
-        .nest("/admin", admin.into_router());
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-    println!("Quickstart running at http://127.0.0.1:3000/admin");
-    axum::serve(listener, app).await.unwrap();
+    App::new()
+        .name("Terminus Quickstart")
+        .port(3000)
+        .get("/", || async {
+            html_response("<h1>Welcome to Terminus!</h1><p><a href='/admin'>Go to Admin Panel &rarr;</a></p>")
+        })
+        .panel(admin)
+        .run()
+        .await
 }

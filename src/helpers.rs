@@ -7,6 +7,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 use chrono::{DateTime, Utc};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use crate::domain::User;
 
 tokio::task_local! {
@@ -282,6 +284,39 @@ pub struct AbortError {
     pub message: String,
 }
 
+impl AbortError {
+    pub fn new(status: u16, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: message.into(),
+        }
+    }
+
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Self::new(400, message)
+    }
+
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::new(401, message)
+    }
+
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::new(403, message)
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::new(404, message)
+    }
+
+    pub fn unprocessable(message: impl Into<String>) -> Self {
+        Self::new(422, message)
+    }
+
+    pub fn server_error(message: impl Into<String>) -> Self {
+        Self::new(500, message)
+    }
+}
+
 impl std::fmt::Display for AbortError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "HTTP {} Error: {}", self.status, self.message)
@@ -289,6 +324,59 @@ impl std::fmt::Display for AbortError {
 }
 
 impl std::error::Error for AbortError {}
+
+impl IntoResponse for AbortError {
+    fn into_response(self) -> Response {
+        let status = StatusCode::from_u16(self.status)
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        let wants_json = request_info()
+            .map(|r| r.wants_json() || r.is_json())
+            .unwrap_or(false);
+
+        if wants_json {
+            let body = serde_json::json!({
+                "error": true,
+                "status": self.status,
+                "message": self.message,
+            })
+            .to_string();
+            (
+                status,
+                [("Content-Type", "application/json; charset=utf-8")],
+                body,
+            )
+                .into_response()
+        } else {
+            let html = format!(
+                r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{code} - {msg}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 flex items-center justify-center min-h-screen p-4 font-sans antialiased">
+  <div class="text-center p-8 max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 mb-6 font-mono font-bold text-2xl">
+      {code}
+    </div>
+    <h1 class="text-2xl font-bold text-white mb-2">{msg}</h1>
+    <p class="text-sm text-zinc-400 mb-6">The requested operation could not be completed with status code {code}.</p>
+    <a href="/" class="inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors shadow-lg shadow-indigo-600/20">
+      Return to Home
+    </a>
+  </div>
+</body>
+</html>"#,
+                code = self.status,
+                msg = self.message
+            );
+            (status, axum::response::Html(html)).into_response()
+        }
+    }
+}
 
 /// Aborts execution with an HTTP status code and message.
 pub fn abort(status_code: u16, message: impl Into<String>) -> Result<(), AbortError> {

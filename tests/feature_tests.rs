@@ -1770,4 +1770,136 @@ fn test_platform_adapters_and_sdk_generator() {
     assert_eq!(scan.location, Some("Aisle-4-Shelf-2".to_string()));
 }
 
+#[tokio::test]
+async fn test_abort_error_into_response_and_constructors() {
+    use terminus::prelude::*;
+    use axum::response::IntoResponse;
+
+    // 1. Test convenience constructors
+    let err_forbidden = AbortError::forbidden("Access Denied");
+    assert_eq!(err_forbidden.status, 403);
+    assert_eq!(err_forbidden.message, "Access Denied");
+
+    let err_404 = AbortError::not_found("Resource missing");
+    assert_eq!(err_404.status, 404);
+
+    let err_bad = AbortError::bad_request("Invalid input");
+    assert_eq!(err_bad.status, 400);
+
+    // 2. Test IntoResponse with JSON client
+    let req_json = RequestInfo::new("GET", "/api/secure")
+        .with_header("Accept", "application/json");
+    let resp_json = with_request(req_json, || {
+        err_forbidden.clone().into_response()
+    });
+    assert_eq!(resp_json.status(), axum::http::StatusCode::FORBIDDEN);
+
+    // 3. Test IntoResponse with HTML browser client
+    let req_html = RequestInfo::new("GET", "/admin/secure")
+        .with_header("Accept", "text/html");
+    let resp_html = with_request(req_html, || {
+        err_forbidden.into_response()
+    });
+    assert_eq!(resp_html.status(), axum::http::StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_app_fluent_group_static_and_openapi() {
+    use terminus::prelude::*;
+
+    let sdk_gen = SdkGenerator::new("Acme API", "1.0.0")
+        .endpoint("GET", "/api/v1/ping", None, "string", "Ping service");
+
+    let app = App::new()
+        .port(4000)
+        .group("/api/v1", |group| {
+            group
+                .get("/ping", || async { "pong" })
+                .post("/echo", || async { "echo" })
+        })
+        .static_dir("/assets", "./")
+        .openapi("/api/openapi.json", &sdk_gen);
+
+    let router = app.build();
+    let _ = router;
+}
+
+#[test]
+fn test_swift_sdk_and_openapi_generation() {
+    use terminus::prelude::*;
+
+    let gen = SdkGenerator::new("Terminus Store", "2.0.0")
+        .type_schema("Product", vec![
+            ("id", "string"),
+            ("title", "string"),
+            ("price", "number"),
+            ("inStock", "boolean"),
+        ])
+        .endpoint("GET", "/api/products", None, "Product[]", "Fetch product catalog")
+        .endpoint("POST", "/api/checkout", Some("Product"), "Product", "Place order");
+
+    // 1. Swift SDK Verification
+    let swift = gen.to_swift();
+    assert!(swift.contains("public struct Product : Codable, Sendable"));
+    assert!(swift.contains("public var title: String"));
+    assert!(swift.contains("public var price: Double"));
+    assert!(swift.contains("public var inStock: Bool"));
+    assert!(swift.contains("public class TerminusStoreClient : @unchecked Sendable"));
+    assert!(swift.contains("URLSession.shared.data(for: req)"));
+    assert!(swift.contains("public func get_api_products() async throws -> Product[]"));
+
+    // 2. OpenAPI Specification Verification
+    let openapi = gen.to_openapi_json();
+    assert_eq!(openapi["openapi"], "3.0.3");
+    assert_eq!(openapi["info"]["title"], "Terminus Store");
+    assert!(openapi["paths"]["/api/products"]["get"].is_object());
+    assert!(openapi["paths"]["/api/checkout"]["post"]["requestBody"].is_object());
+    assert!(openapi["components"]["schemas"]["Product"].is_object());
+}
+
+#[test]
+fn test_blueprint_types_and_database_manager() {
+    use terminus::prelude::*;
+
+    let db = Database::memory().expect("in-memory db initialization failed");
+
+    // 1. Create table with comprehensive Blueprint column types
+    db.with_conn(|conn| {
+        Schema::create(conn, "test_records", |table| {
+            table.id();
+            table.string("title");
+            table.text("body");
+            table.nullable_text("notes");
+            table.integer("views");
+            table.boolean("published");
+            table.float("rating");
+            table.decimal("price");
+            table.datetime("published_at");
+            table.json("metadata");
+            table.timestamps();
+        }).unwrap();
+    });
+
+    // 2. Insert and query using Database helper
+    db.execute("INSERT INTO test_records (id, title, body, views, published, rating, price, published_at, metadata, created_at, updated_at) VALUES ('1', 'Intro', 'Content', 10, 1, 4.8, 19.99, '2026-10-12', '{}', '2026-10-12', '2026-10-12')").unwrap();
+
+    let count = db.with_conn(|conn| {
+        conn.query_row("SELECT COUNT(1) FROM test_records WHERE title = ?1", rusqlite::params!["Intro"], |r| r.get::<_, usize>(0)).unwrap()
+    });
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn test_enhanced_testing_assertions() {
+    use terminus::prelude::*;
+
+    expect(42).to_equal(42);
+    expect("hello").to_equal("hello");
+    expect(10).to_not_equal(20);
+
+    let items = vec!["a", "b", "c"];
+    expect(items).to_have_length(3);
+}
+
+
 

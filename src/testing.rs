@@ -38,6 +38,14 @@ impl<T: Debug> Expectation<T> {
         self
     }
 
+    /// Assert equality (alias for to_be)
+    pub fn to_equal<E: Debug>(self, expected: E) -> Self
+    where
+        T: PartialEq<E>,
+    {
+        self.to_be(expected)
+    }
+
     /// Assert inequality
     pub fn to_not_be<E: Debug>(self, unexpected: E) -> Self
     where
@@ -47,6 +55,28 @@ impl<T: Debug> Expectation<T> {
             self.value != unexpected,
             "Expectation failed: expected `{:?}` to NOT be `{:?}`",
             self.value, unexpected
+        );
+        self
+    }
+
+    /// Assert inequality (alias for to_not_be)
+    pub fn to_not_equal<E: Debug>(self, unexpected: E) -> Self
+    where
+        T: PartialEq<E>,
+    {
+        self.to_not_be(unexpected)
+    }
+}
+
+impl<T> Expectation<Vec<T>> {
+    /// Assert vector has expected length
+    pub fn to_have_length(self, len: usize) -> Self {
+        assert_eq!(
+            self.value.len(),
+            len,
+            "Expectation failed: expected vector to have length {}, got {}",
+            len,
+            self.value.len()
         );
         self
     }

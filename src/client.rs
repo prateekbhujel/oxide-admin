@@ -316,6 +316,199 @@ impl SdkGenerator {
         ));
         dart
     }
+
+    /// Generate clean, native Swift 5.9+ Client SDK (iOS, iPadOS, macOS)
+    pub fn to_swift(&self) -> String {
+        let mut swift = format!(
+            "/**\n * Terminus Client SDK for {}\n * API Version: {}\n * Generated automatically by Terminus Framework.\n */\n\nimport Foundation\n\n",
+            self.app_name, self.api_version
+        );
+
+        // Export struct schemas
+        for (name, fields) in &self.type_schemas {
+            swift.push_str(&format!("public struct {} : Codable, Sendable {{\n", name));
+            for (field, f_type) in fields {
+                let swift_type = match f_type.as_str() {
+                    "string" | "String" => "String",
+                    "number" | "number?" | "f64" | "i64" | "u32" | "int" => "Double",
+                    "boolean" | "bool" => "Bool",
+                    other => other,
+                };
+                swift.push_str(&format!("    public var {}: {}\n", field, swift_type));
+            }
+            swift.push_str("    public init(");
+            let init_params: Vec<String> = fields
+                .iter()
+                .map(|(f, t)| {
+                    let st = match t.as_str() {
+                        "string" | "String" => "String",
+                        "number" | "number?" | "f64" | "i64" | "u32" | "int" => "Double",
+                        "boolean" | "bool" => "Bool",
+                        other => other,
+                    };
+                    format!("{}: {}", f, st)
+                })
+                .collect();
+            swift.push_str(&init_params.join(", "));
+            swift.push_str(") {\n");
+            for (field, _) in fields {
+                swift.push_str(&format!("        self.{} = {}\n", field, field));
+            }
+            swift.push_str("    }\n}\n\n");
+        }
+
+        // Export Client Class
+        let class_name = format!("{}Client", self.app_name.replace(' ', ""));
+        swift.push_str(&format!(
+            r#"public class {} : @unchecked Sendable {{
+    public let baseUrl: String
+    public var token: String?
+
+    public init(baseUrl: String = "http://127.0.0.1:3000", token: String? = nil) {{
+        self.baseUrl = baseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        self.token = token
+    }}
+
+    private func request<T: Decodable>(method: String, path: String, body: Data? = nil) async throws -> T {{
+        guard let url = URL(string: "\(self.baseUrl)\(path)") else {{
+            throw URLError(.badURL)
+        }}
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = self.token {{
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }}
+        req.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {{
+            throw URLError(.badServerResponse)
+        }}
+        return try JSONDecoder().decode(T.self, from: data)
+    }}
+"#,
+            class_name
+        ));
+
+        // Methods
+        for ep in &self.endpoints {
+            let func_name = ep.path.trim_start_matches('/').replace('/', "_").replace(':', "");
+            let (req_arg, body_arg) = if let Some(ref rt) = ep.request_type {
+                (format!("data: {}", rt), "try? JSONEncoder().encode(data)")
+            } else {
+                (String::new(), "nil")
+            };
+
+            let swift_resp = match ep.response_type.as_str() {
+                "string" | "String" => "String",
+                "number" | "Double" => "Double",
+                "boolean" | "Bool" => "Bool",
+                other => other,
+            };
+
+            swift.push_str(&format!(
+                r#"
+    /** {} */
+    public func {}_{}({}) async throws -> {} {{
+        return try await self.request(method: "{}", path: "{}", body: {})
+    }}
+"#,
+                ep.description,
+                ep.method.to_lowercase(),
+                func_name,
+                req_arg,
+                swift_resp,
+                ep.method,
+                ep.path,
+                body_arg
+            ));
+        }
+
+        swift.push_str("}\n");
+        swift
+    }
+
+    /// Generate standard OpenAPI 3.0.3 specification JSON
+    pub fn to_openapi_json(&self) -> serde_json::Value {
+        let mut paths = serde_json::Map::new();
+        for ep in &self.endpoints {
+            let mut method_obj = serde_json::json!({
+                "summary": ep.description,
+                "operationId": format!("{}_{}", ep.method.to_lowercase(), ep.path.trim_start_matches('/').replace('/', "_")),
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "title": ep.response_type
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            if let Some(ref req_t) = ep.request_type {
+                method_obj["requestBody"] = serde_json::json!({
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "title": req_t
+                            }
+                        }
+                    }
+                });
+            }
+
+            let path_entry = paths.entry(ep.path.clone()).or_insert_with(|| serde_json::json!({}));
+            if let Some(map) = path_entry.as_object_mut() {
+                map.insert(ep.method.to_lowercase(), method_obj);
+            }
+        }
+
+        let mut schemas = serde_json::Map::new();
+        for (name, fields) in &self.type_schemas {
+            let mut props = serde_json::Map::new();
+            for (f_name, f_type) in fields {
+                props.insert(
+                    f_name.clone(),
+                    serde_json::json!({
+                        "type": match f_type.as_str() {
+                            "number" | "Double" => "number",
+                            "boolean" | "Bool" => "boolean",
+                            _ => "string"
+                        }
+                    }),
+                );
+            }
+            schemas.insert(
+                name.clone(),
+                serde_json::json!({
+                    "type": "object",
+                    "properties": props
+                }),
+            );
+        }
+
+        serde_json::json!({
+            "openapi": "3.0.3",
+            "info": {
+                "title": self.app_name,
+                "version": self.api_version,
+                "description": "API specification generated automatically by Terminus Framework."
+            },
+            "paths": paths,
+            "components": {
+                "schemas": schemas
+            }
+        })
+    }
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 /// Active Record Model trait
 pub trait Model: Sized + Clone + Serialize + for<'de> Deserialize<'de> {
@@ -543,6 +544,16 @@ impl Blueprint {
         self
     }
 
+    pub fn text(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} TEXT NOT NULL", col));
+        self
+    }
+
+    pub fn nullable_text(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} TEXT", col));
+        self
+    }
+
     pub fn integer(&mut self, col: &str) -> &mut Self {
         self.columns.push(format!("{} INTEGER NOT NULL DEFAULT 0", col));
         self
@@ -550,6 +561,26 @@ impl Blueprint {
 
     pub fn boolean(&mut self, col: &str) -> &mut Self {
         self.columns.push(format!("{} INTEGER NOT NULL DEFAULT 0", col));
+        self
+    }
+
+    pub fn float(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} REAL NOT NULL DEFAULT 0.0", col));
+        self
+    }
+
+    pub fn decimal(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} REAL NOT NULL DEFAULT 0.0", col));
+        self
+    }
+
+    pub fn datetime(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} TEXT NOT NULL", col));
+        self
+    }
+
+    pub fn json(&mut self, col: &str) -> &mut Self {
+        self.columns.push(format!("{} TEXT NOT NULL DEFAULT '{{}}'", col));
         self
     }
 
@@ -584,5 +615,58 @@ impl Schema {
     pub fn drop_if_exists(conn: &rusqlite::Connection, table: &str) -> Result<(), rusqlite::Error> {
         conn.execute(&format!("DROP TABLE IF EXISTS {};", table), [])?;
         Ok(())
+    }
+}
+
+/// Thread-safe SQLite Database Manager for beginner and enterprise applications
+#[derive(Clone)]
+pub struct Database {
+    conn: Arc<Mutex<rusqlite::Connection>>,
+}
+
+impl Database {
+    /// Create a fast in-memory SQLite database
+    pub fn memory() -> Result<Self, rusqlite::Error> {
+        let conn = rusqlite::Connection::open_in_memory()?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    /// Open or create a file-based SQLite database
+    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, rusqlite::Error> {
+        let conn = rusqlite::Connection::open(path)?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    /// Access the underlying connection in a closure
+    pub fn with_conn<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&rusqlite::Connection) -> R,
+    {
+        let conn = self.conn.lock().unwrap();
+        f(&conn)
+    }
+
+    /// Access the underlying connection mutably in a closure
+    pub fn with_conn_mut<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut rusqlite::Connection) -> R,
+    {
+        let mut conn = self.conn.lock().unwrap();
+        f(&mut conn)
+    }
+
+    /// Execute a raw SQL statement
+    pub fn execute(&self, sql: &str) -> Result<usize, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(sql, [])
+    }
+
+    /// Get raw connection reference Arc
+    pub fn connection_arc(&self) -> Arc<Mutex<rusqlite::Connection>> {
+        self.conn.clone()
     }
 }

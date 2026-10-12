@@ -168,7 +168,7 @@ Terminus provides zero-ceremony global helpers accessible everywhere in your app
 ```rust
 use terminus::prelude::*;
 
-pub async fn handle_checkout() -> Result<ApiResponse, AbortError> {
+pub async fn handle_checkout() -> Result<ApiResponse<serde_json::Value>, AbortError> {
     // 1. Authorization checks
     abort_unless(can("orders.create"), 403, "Permission Denied")?;
 
@@ -311,6 +311,8 @@ let sdk = SdkGenerator::new("Shop App", "1.0.0")
     .endpoint("GET", "/api/products", None, "Product[]", "Fetch product catalog");
 let typescript_code = sdk.to_typescript();
 let dart_code = sdk.to_dart();
+let swift_code = sdk.to_swift();
+let openapi_spec = sdk.to_openapi_json();
 
 // 2. Desktop Platform Adapter: Offline Workstation Sync Queue
 let sync_queue = OfflineSyncQueue::new();
@@ -376,7 +378,7 @@ terminus make:migration <name>        # Scaffold a timestamped SQL migration
 terminus migrate                      # Run pending database migrations
 terminus db:tables                    # Inspect database schema and statistics
 terminus db:seed                      # Seed initial database records
-terminus make:sdk [--lang=ts|dart]    # Export typed client SDK for mobile & frontend
+terminus make:sdk [--lang=ts|dart|swift|openapi] # Export typed client SDK for mobile & frontend
 terminus make:desktop [Name]          # Scaffold Tauri / desktop workstation offline bridge
 terminus make:iot [DeviceId]          # Scaffold IoT hardware scanner & telemetry script
 terminus make:job <Name>              # Scaffold an asynchronous job
