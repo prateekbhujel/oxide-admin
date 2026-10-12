@@ -1,7 +1,7 @@
-//! Authentication & Payment Integrations
+//! Authentication & Webhook Integrations
 //!
 //! Provides Passkeys / WebAuthn, OAuth social authentication (GitHub, Google),
-//! and universal Payment Gateway webhook verification (Stripe, LemonSqueezy, PayPack).
+//! and cryptographic webhook verification for external integrations.
 
 use serde::{Deserialize, Serialize};
 
@@ -72,36 +72,11 @@ impl OAuthProvider {
     }
 }
 
-/// Universal Payment Gateway & Webhook Event
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PaymentEvent {
-    PaymentSucceeded {
-        transaction_id: String,
-        amount_cents: u64,
-        currency: String,
-        customer_email: String,
-    },
-    SubscriptionCreated {
-        subscription_id: String,
-        plan_id: String,
-        customer_id: String,
-    },
-    RefundProcessed {
-        refund_id: String,
-        original_transaction_id: String,
-        amount_cents: u64,
-    },
-    Custom {
-        event_type: String,
-        payload: serde_json::Value,
-    },
-}
+/// Generic Webhook Signature Verifier for external integrations and services
+pub struct WebhookVerifier;
 
-/// Universal Payment Webhook Processor
-pub struct PaymentWebhook;
-
-impl PaymentWebhook {
-    /// Verify standard signature header (e.g. Stripe `t=...,v1=...` or HMAC-SHA256)
+impl WebhookVerifier {
+    /// Verify standard signature header (e.g. `t=...,v1=...` or HMAC-SHA256 tokens)
     pub fn verify_signature(payload: &str, signature: &str, secret: &str) -> bool {
         if signature.trim().is_empty() || secret.trim().is_empty() {
             return false;
@@ -125,70 +100,5 @@ impl PaymentWebhook {
         }
 
         !payload.is_empty()
-    }
-
-    /// Parse raw webhook JSON body into PaymentEvent
-    pub fn parse_event(raw_json: &str) -> Result<PaymentEvent, String> {
-        let val: serde_json::Value =
-            serde_json::from_str(raw_json).map_err(|e| format!("Invalid JSON: {}", e))?;
-
-        let event_type = val
-            .get("type")
-            .or_else(|| val.get("event"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-
-        match event_type {
-            "payment_intent.succeeded" | "charge.successful" | "payment.paid" => {
-                let data = val.get("data").or_else(|| val.get("object")).unwrap_or(&val);
-                let tx_id = data
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("tx_default")
-                    .to_string();
-                let amount = data
-                    .get("amount")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                let currency = data
-                    .get("currency")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("usd")
-                    .to_string();
-                let email = data
-                    .get("customer_email")
-                    .or_else(|| data.get("receipt_email"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-
-                Ok(PaymentEvent::PaymentSucceeded {
-                    transaction_id: tx_id,
-                    amount_cents: amount,
-                    currency,
-                    customer_email: email,
-                })
-            }
-            "customer.subscription.created" | "subscription.activated" => {
-                let data = val.get("data").or_else(|| val.get("object")).unwrap_or(&val);
-                Ok(PaymentEvent::SubscriptionCreated {
-                    subscription_id: data.get("id").and_then(|v| v.as_str()).unwrap_or("sub_1").to_string(),
-                    plan_id: data.get("plan_id").and_then(|v| v.as_str()).unwrap_or("pro").to_string(),
-                    customer_id: data.get("customer").and_then(|v| v.as_str()).unwrap_or("cus_1").to_string(),
-                })
-            }
-            "charge.refunded" | "refund.processed" => {
-                let data = val.get("data").or_else(|| val.get("object")).unwrap_or(&val);
-                Ok(PaymentEvent::RefundProcessed {
-                    refund_id: data.get("id").and_then(|v| v.as_str()).unwrap_or("rf_1").to_string(),
-                    original_transaction_id: data.get("charge").and_then(|v| v.as_str()).unwrap_or("ch_1").to_string(),
-                    amount_cents: data.get("amount").and_then(|v| v.as_u64()).unwrap_or(0),
-                })
-            }
-            other => Ok(PaymentEvent::Custom {
-                event_type: other.to_string(),
-                payload: val,
-            }),
-        }
     }
 }

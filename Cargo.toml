@@ -33,20 +33,8 @@ name = "terminus"
 path = "src/bin/terminus.rs"
 
 [[example]]
-name = "demo"
-path = "examples/demo.rs"
-
-[[example]]
 name = "quickstart"
 path = "examples/quickstart.rs"
-
-[[example]]
-name = "saas_store"
-path = "examples/saas_store.rs"
-
-[[example]]
-name = "helpdesk"
-path = "examples/helpdesk.rs"
 
 [[example]]
 name = "universal_wms"

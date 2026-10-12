@@ -65,11 +65,6 @@ fn main() {
         "ws:serve" => run_ws_server(),
         "theme:preview" => preview_theme(),
         "mail:outbox" => view_mail_outbox(),
-        "make:cpanel" | "cpanel:init" | "cpanel:setup" | "deploy:cpanel" => {
-            let port = args.iter().find(|a| a.starts_with("--port=")).map(|a| a.trim_start_matches("--port="));
-            let bin = args.iter().find(|a| a.starts_with("--bin=")).map(|a| a.trim_start_matches("--bin="));
-            make_cpanel(port, bin);
-        }
         "make:sdk" | "client:sdk" => {
             let lang = args.iter().find(|a| a.starts_with("--lang=")).map(|a| a.trim_start_matches("--lang="));
             make_sdk(lang);
@@ -107,7 +102,7 @@ fn print_banner() {
 
 fn print_help() {
     print_banner();
-    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:cpanel\x1b[0m              Generate cPanel & shared hosting reverse proxy & deployment bundle\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:cpanel\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
+    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
 }
 
 fn print_version() {
@@ -885,64 +880,6 @@ fn generate_module_mod_rs(singular: &str, slug: &str, components: &[&str]) -> St
 
     out.push_str("}\n");
     out
-}
-
-fn make_cpanel(port_opt: Option<&str>, bin_opt: Option<&str>) {
-    let bin_str = match bin_opt {
-        Some(b) if !b.is_empty() => b.to_string(),
-        _ => match prompt::text("Binary name for your application (e.g. app or terminus-admin)", None, Some("app"), true) {
-            Ok(b) if !b.is_empty() => b,
-            _ => "app".to_string(),
-        },
-    };
-
-    let port_val: u16 = match port_opt {
-        Some(p) => p.parse::<u16>().unwrap_or(3000),
-        _ => match prompt::text("Internal TCP Port to bind (1024-65535)", None, Some("3000"), true) {
-            Ok(p) => p.parse::<u16>().unwrap_or(3000),
-            _ => 3000,
-        },
-    };
-
-    let strategy = match prompt::select(
-        "Choose reverse proxy architecture:",
-        &[
-            ("hybrid", "Hybrid: Apache .htaccess mod_proxy + PHP Reverse Proxy Fallback [Recommended]"),
-            ("php", "Universal PHP Supervisor & Streaming Proxy (100% Shared Hosting Compatibility)"),
-            ("htaccess", "Pure Apache mod_rewrite / mod_proxy (.htaccess only)"),
-        ],
-        0,
-    ) {
-        Ok(s) => s,
-        Err(_) => "hybrid",
-    };
-
-    let output_dir = Path::new("cpanel");
-    match terminus::cpanel::scaffold_cpanel_bundle(output_dir, port_val, &bin_str, strategy) {
-        Ok(files) => {
-            println!("\x1b[32m✔ Scaffolded cPanel Shared Hosting Bundle:\x1b[0m");
-            for file in files {
-                println!("  \x1b[36m•\x1b[0m {}", file.display());
-            }
-
-            // Mark scripts as executable on Unix
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(output_dir.join("build.sh"), fs::Permissions::from_mode(0o755));
-                let _ = fs::set_permissions(output_dir.join("app").join("watchdog.sh"), fs::Permissions::from_mode(0o755));
-            }
-
-            println!("\n\x1b[1m🚀 Next Steps to Deploy to cPanel:\x1b[0m");
-            println!("  1. Run \x1b[33m./cpanel/build.sh\x1b[0m to compile the static Linux binary and create \x1b[32mcpanel-deploy.zip\x1b[0m");
-            println!("  2. Upload \x1b[32mcpanel-deploy.zip\x1b[0m to cPanel File Manager in \x1b[34m/home/username/\x1b[0m and extract");
-            println!("  3. Add a Cron Job in cPanel: \x1b[33m* * * * * /home/username/app/watchdog.sh > /dev/null 2>&1\x1b[0m");
-            println!("  4. Open your domain in browser — Terminus is live!");
-        }
-        Err(e) => {
-            eprintln!("\x1b[31mError:\x1b[0m Failed to generate cPanel scaffolding: {e}");
-        }
-    }
 }
 
 fn run_studio(db_path: &str, is_watch: bool, is_once: bool, tab_arg: Option<u8>) {

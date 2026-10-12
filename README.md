@@ -20,12 +20,12 @@ Whether building high-throughput web backends, rich content management systems, 
 - **Interactive UI & Visual Builders**: Drag-and-drop form block builders, sortable table rows with HTML5 drag handles, and inline-editable table cells with instantaneous asynchronous persistence.
 - **Advanced Filtering Engine**: Comprehensive filtering with date-range pickers, numeric range sliders, multi-select tag badges, boolean toggles, full-text fuzzy search, and saved filter presets.
 - **Native Document Generation**: OpenXML Microsoft Excel (`.xlsx`), CSV export/import, and native PDF report and invoice compilation with zero external C dependencies.
-- **Identity, Passkeys & Payments**: WebAuthn/Passkey registration and authentication, OAuth 2.0 social authentication (GitHub, Google, custom OIDC), and universal Payment Gateway webhook verification (Stripe, LemonSqueezy, PayPack).
+- **Identity, Passkeys & Webhooks**: WebAuthn / Passkey registration and authentication, OAuth 2.0 social authentication (GitHub, Google, custom OIDC), and cryptographic webhook signature verification for external services.
 - **Multi-Platform Ready**: Tailored endpoints and payloads for mobile push notifications (APNs / FCM), IoT device token telemetry ingestion, and desktop webview/Tauri IPC integration.
 - **Dynamic Role-Based Access Control**: Granular direct permissions, explicit deny precedence overriding administrative privileges, wildcard hierarchies (`orders.*`), and 30-second TTL in-memory grant caching with instant invalidation on mutation.
 - **Active Record ORM & Fluent Query Builder**: Expressive query chains with parameterized SQL compilation, schema migrations, and SQLite persistence.
 - **Real-Time Collaboration & Telemetry**: Native Axum WebSocket broadcasting (`/admin/ws`), multi-admin presence, background queue worker, transactional mailer, and terminal UI telemetry dashboard (`terminus studio`).
-- **Production Deployment Engine**: One-command generation of self-healing deployment bundles (`terminus make:cpanel`) with Apache reverse proxy configuration and POSIX watchdog supervisors.
+- **Production-Ready & Self-Contained**: Compiles into a single high-performance static binary with zero external runtime dependencies, ready for Docker, systemd, bare metal, or cloud container deployment.
 
 ---
 
@@ -251,9 +251,9 @@ let pdf_bytes = pdf.to_pdf_bytes();
 
 ---
 
-## Identity, Passkeys & Payments
+## Identity, Passkeys & Webhooks
 
-Terminus includes built-in flows for modern authentication and payment gateway webhooks:
+Terminus includes built-in flows for modern passkey authentication, OAuth social redirection, and cryptographic webhook verification for external integrations:
 
 ```rust
 use terminus::prelude::*;
@@ -268,20 +268,11 @@ let github_oauth = OAuthProvider::GitHub {
 };
 let redirect_url = github_oauth.authorization_url("https://terminus.dev/auth/callback", "random_state");
 
-// 3. Payment Webhook Verification & Deserialization
-let is_valid = PaymentWebhook::verify_signature(&payload, &signature_header, &webhook_secret);
+// 3. Cryptographic Webhook Signature Verification
+// Compatible with any payment gateway, SaaS event dispatcher, or Git webhook
+let is_valid = WebhookVerifier::verify_signature(&payload, &signature_header, &webhook_secret);
 if is_valid {
-    if let Ok(event) = PaymentWebhook::parse_event(&payload) {
-        match event {
-            PaymentEvent::PaymentSucceeded { transaction_id, amount_cents, .. } => {
-                println!("Payment received: {} cents for tx {}", amount_cents, transaction_id);
-            }
-            PaymentEvent::SubscriptionCreated { subscription_id, plan_id, .. } => {
-                println!("New subscription {} on plan {}", subscription_id, plan_id);
-            }
-            _ => {}
-        }
-    }
+    // Process verified event payload safely with your custom domain logic
 }
 ```
 
@@ -387,7 +378,6 @@ terminus make:token <name>            # Issue a personal access token
 terminus token:list                   # List active access tokens
 terminus token:revoke <id>            # Revoke an access token
 terminus cache:clear                  # Clear memory and Redis cache stores
-terminus make:cpanel                  # Scaffold cPanel / shared hosting reverse proxy bundle
 terminus routes                       # List registered routes and API endpoints
 terminus ws:serve                     # Start dedicated WebSocket service
 terminus theme:preview                # Display theme color configurations
@@ -411,6 +401,21 @@ fn test_order_processing() {
         expect(order.total).to_be_greater_than(100);
     });
 }
+```
+
+---
+
+## Reference Examples
+
+Run the curated examples directly from the repository:
+
+```bash
+# Minimal web application and admin panel starter
+cargo run --example quickstart
+
+# Universal multi-platform commerce and logistics hub
+# (Web Admin, Mobile Push & SDKs, Desktop Offline Sync, IoT Barcode Scanner)
+cargo run --example universal_wms
 ```
 
 ---

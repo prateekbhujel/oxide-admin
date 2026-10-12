@@ -2,7 +2,6 @@ pub mod app;
 pub mod auth;
 pub mod cache;
 pub mod client;
-pub mod cpanel;
 pub mod debug;
 pub mod document;
 pub mod domain;
@@ -48,7 +47,7 @@ pub mod prelude {
         AbortError, RequestAccessor, RequestInfo,
     };
     pub use crate::integrations::{
-        OAuthProvider, PasskeyChallenge, PasskeyCredential, PaymentEvent, PaymentWebhook,
+        OAuthProvider, PasskeyChallenge, PasskeyCredential, WebhookVerifier,
     };
     pub use crate::mail::{MailMessage, Mailer};
     pub use crate::module::{ApiResponse, AppModule, DynamicModule, ValidatedRequest};

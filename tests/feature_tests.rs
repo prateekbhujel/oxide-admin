@@ -1190,68 +1190,6 @@ async fn test_enterprise_app_module_and_api_responses() {
 }
 
 #[test]
-fn test_cpanel_scaffolding_templates_and_configs() {
-    use terminus::cpanel::*;
-
-    // 1. Test .htaccess generation for different strategies
-    let htaccess_hybrid = generate_htaccess(3000, "hybrid");
-    assert!(htaccess_hybrid.contains("RewriteEngine On"));
-    assert!(htaccess_hybrid.contains("http://127.0.0.1:3000/$1 [P,L]"));
-    assert!(htaccess_hybrid.contains("RewriteRule ^(.*)$ index.php [QSA,L]"));
-    assert!(htaccess_hybrid.contains("<FilesMatch \"\\.(db|sqlite|sqlite3|env|sh|log|pid)$\">"));
-    assert!(htaccess_hybrid.contains("Require all denied"));
-
-    let htaccess_php = generate_htaccess(8080, "php");
-    assert!(htaccess_php.contains("RewriteRule ^(.*)$ index.php [QSA,L]"));
-    assert!(!htaccess_php.contains("mod_proxy.c"));
-
-    let htaccess_proxy = generate_htaccess(4000, "htaccess");
-    assert!(htaccess_proxy.contains("http://127.0.0.1:4000/$1 [P,L]"));
-    assert!(!htaccess_proxy.contains("RewriteRule ^(.*)$ index.php"));
-
-    // 2. Test PHP reverse proxy & supervisor bridge
-    let php_bridge = generate_php_bridge(3000, "my_app");
-    assert!(php_bridge.contains("$appPort    = 3000;"));
-    assert!(php_bridge.contains("$binaryName = 'my_app';"));
-    assert!(php_bridge.contains("function isPortOpen("));
-    assert!(php_bridge.contains("fsockopen"));
-    assert!(php_bridge.contains("curl_init"));
-    assert!(php_bridge.contains("X-Forwarded-For"));
-    assert!(php_bridge.contains("X-Forwarded-Proto"));
-    assert!(php_bridge.contains("http_response_code($httpCode);"));
-
-    // 3. Test Cron watchdog script
-    let watchdog = generate_watchdog(3000, "my_app");
-    assert!(watchdog.contains("BIN_NAME=\"my_app\""));
-    assert!(watchdog.contains("PORT=3000"));
-    assert!(watchdog.contains("curl -s -o /dev/null -w \"%{http_code}\""));
-    assert!(watchdog.contains("nohup \"$BIN_PATH\" >> \"$LOG_PATH\" 2>&1 &"));
-
-    // 4. Test Build script & README
-    let build_sh = generate_build_script("my_app");
-    assert!(build_sh.contains("APP_NAME=\"my_app\""));
-    assert!(build_sh.contains("x86_64-unknown-linux-musl"));
-
-    let readme = generate_readme(3000, "my_app");
-    assert!(readme.contains("# Deploying Terminus on cPanel Shared Hosting"));
-    assert!(readme.contains("127.0.0.1:3000"));
-
-    // 5. Test bundle scaffolding to temporary directory
-    let temp_dir = std::env::temp_dir().join(format!("terminus_cpanel_test_{}", std::process::id()));
-    let created = scaffold_cpanel_bundle(&temp_dir, 3000, "test_app", "hybrid").unwrap();
-    assert_eq!(created.len(), 6);
-    assert!(temp_dir.join("public_html/.htaccess").exists());
-    assert!(temp_dir.join("public_html/index.php").exists());
-    assert!(temp_dir.join("app/watchdog.sh").exists());
-    assert!(temp_dir.join("app/.env.example").exists());
-    assert!(temp_dir.join("build.sh").exists());
-    assert!(temp_dir.join("README.md").exists());
-
-    // Clean up temporary test directory
-    let _ = std::fs::remove_dir_all(&temp_dir);
-}
-
-#[test]
 fn test_studio_tui_rendering_and_telemetry() {
     use terminus::studio::StudioApp;
 
@@ -1595,7 +1533,7 @@ fn test_excel_and_pdf_document_generation() {
 }
 
 #[test]
-fn test_passkeys_oauth_and_payments() {
+fn test_passkeys_oauth_and_webhooks() {
     use terminus::prelude::*;
 
     // 1. Passkey Challenge
@@ -1614,28 +1552,12 @@ fn test_passkeys_oauth_and_payments() {
     assert!(auth_url.contains("client_id=gh_client_123"));
     assert!(auth_url.contains("state=state_abc"));
 
-    // 3. Payment Webhook verification & parsing
-    let raw_event = serde_json::json!({
-        "type": "payment_intent.succeeded",
-        "data": {
-            "id": "pi_12345",
-            "amount": 4900,
-            "currency": "usd",
-            "customer_email": "buyer@example.com"
-        }
-    }).to_string();
-
-    assert!(PaymentWebhook::verify_signature(&raw_event, "test_sig", "whsec_abc"));
-    let event = PaymentWebhook::parse_event(&raw_event).unwrap();
-    match event {
-        PaymentEvent::PaymentSucceeded { transaction_id, amount_cents, currency, customer_email } => {
-            assert_eq!(transaction_id, "pi_12345");
-            assert_eq!(amount_cents, 4900);
-            assert_eq!(currency, "usd");
-            assert_eq!(customer_email, "buyer@example.com");
-        }
-        _ => panic!("Expected PaymentSucceeded"),
-    }
+    // 3. Webhook Signature Verification
+    let raw_payload = r#"{"event":"order.completed","order_id":"ord_101"}"#;
+    assert!(WebhookVerifier::verify_signature(raw_payload, "test_sig", "whsec_abc"));
+    assert!(WebhookVerifier::verify_signature(raw_payload, "t=123,v1=sig_hash", "whsec_abc"));
+    assert!(!WebhookVerifier::verify_signature(raw_payload, "", "whsec_abc"));
+    assert!(!WebhookVerifier::verify_signature(raw_payload, "test_sig", ""));
 }
 
 #[test]
