@@ -1696,3 +1696,78 @@ fn test_sortable_tables_and_draggable_blocks() {
     }
 }
 
+#[test]
+fn test_platform_adapters_and_sdk_generator() {
+    use terminus::prelude::*;
+
+    // 1. Platform detection from user-agent
+    assert_eq!(Platform::from_user_agent("Mozilla/5.0 (Linux; Android 14)"), Platform::Android);
+    assert_eq!(Platform::from_user_agent("Mozilla/5.0 (iPhone; CPU iPhone OS 17)"), Platform::Ios);
+    assert_eq!(Platform::from_user_agent("Tauri/2.0 Desktop"), Platform::Desktop);
+    assert_eq!(Platform::from_user_agent("ESP32-Scanner-Client"), Platform::Iot);
+    assert_eq!(Platform::from_user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X)"), Platform::Web);
+
+    // 2. Push Dispatcher with APNs and delivery
+    let dispatcher = PushDispatcher::new();
+    let n1 = PushNotification::new("Order Shipped", "Package #901 has dispatched", "tok_1").badge(2);
+    let apns = n1.to_apns_payload();
+    assert_eq!(apns["aps"]["badge"], 2);
+    assert_eq!(apns["aps"]["sound"], "default");
+
+    dispatcher.enqueue(n1);
+    assert_eq!(dispatcher.pending_count(), 1);
+    let delivered = dispatcher.deliver_all();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(dispatcher.pending_count(), 0);
+
+    // 3. Typed SDK Generator (TypeScript & Dart)
+    let gen = SdkGenerator::new("Acme Logistics", "1.0")
+        .type_schema("Item", vec![("id", "string"), ("stock", "number")])
+        .endpoint("GET", "/items", None, "Item[]", "Fetch items")
+        .endpoint("POST", "/items", Some("Item"), "Item", "Create item");
+
+    let ts = gen.to_typescript();
+    assert!(ts.contains("export interface Item"));
+    assert!(ts.contains("export class AcmeLogisticsClient"));
+    assert!(ts.contains("public async get_items(): Promise<Item[]>"));
+    assert!(ts.contains("public async post_items(data: Item): Promise<Item>"));
+
+    let dart = gen.to_dart();
+    assert!(dart.contains("class AcmeLogisticsClient"));
+    assert!(dart.contains("import 'package:http/http.dart'"));
+
+    // 4. Desktop Offline Sync Queue
+    let sync_queue = OfflineSyncQueue::new();
+    let tx1 = sync_queue.enqueue(
+        "update_inventory",
+        "/api/inventory/update",
+        serde_json::json!({"sku": "SKU_1", "qty": 5}),
+        "idemp_key_1",
+    );
+    assert_eq!(sync_queue.pending_count(), 1);
+    let pending = sync_queue.pending_records();
+    assert_eq!(pending[0].id, tx1);
+    assert_eq!(pending[0].action, "update_inventory");
+
+    assert!(sync_queue.mark_synced(&tx1));
+    assert_eq!(sync_queue.pending_count(), 0);
+
+    // 5. IoT Device Registry & Hardware Scanner
+    let registry = DeviceRegistry::new();
+    registry.register("dev_scanner_1", "Warehouse Handheld 1", "psk_secret_key_123", "scanner");
+    assert!(registry.is_registered("dev_scanner_1"));
+    assert!(!registry.is_registered("unknown_dev"));
+
+    assert!(registry.verify_signature("dev_scanner_1", "payload_data", "psk_secret_key_123"));
+    assert!(!registry.verify_signature("dev_scanner_1", "payload_data", "wrong_secret"));
+    assert!(registry.heartbeat("dev_scanner_1"));
+
+    let scan = BarcodeScanEvent::new("dev_scanner_1", "079357318921", "UPC-A")
+        .location("Aisle-4-Shelf-2");
+    assert_eq!(scan.device_id, "dev_scanner_1");
+    assert_eq!(scan.barcode, "079357318921");
+    assert_eq!(scan.symbology, "UPC-A");
+    assert_eq!(scan.location, Some("Aisle-4-Shelf-2".to_string()));
+}
+
+

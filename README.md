@@ -287,25 +287,52 @@ if is_valid {
 
 ---
 
+---
+
 ## Multi-Platform Engine (Mobile, IoT, Desktop)
 
-Deploy services consumable across mobile applications, embedded devices, and desktop environments:
+Terminus acts as the universal domain and rule foundation powering web, mobile apps, desktop POS workstations, and IoT hardware scanners:
 
 ```rust
 use terminus::prelude::*;
 
-// 1. Mobile Push Notification Envelope (FCM & APNs)
-let notification = PushNotification::new("Order Shipped", "Your order #104 is on the way", "fcm_token_here")
-    .with_data("tracking_code", "TRK-99201");
-let fcm_json = notification.to_fcm_payload();
+// 1. Mobile Platform Adapter: Push Notifications & Typed SDK Generation
+let push_dispatcher = PushDispatcher::new();
+let notification = PushNotification::new("Order Shipped", "Package #901 on the way", "fcm_token_alice")
+    .with_data("tracking", "TRK-901")
+    .badge(1);
 
-// 2. IoT Telemetry Packet
-let telemetry = DeviceTelemetry::new("edge_device_42")
-    .metric("temperature", 22.8)
-    .metric("battery_level", 98.0);
+push_dispatcher.enqueue(notification);
+let delivered = push_dispatcher.deliver_all();
 
-// 3. Desktop Tauri / Webview IPC Message
-let desktop_event = DesktopMessage::new("window_resize", serde_json::json!({ "width": 1280, "height": 800 }));
+// Automatically generate typed client SDKs for mobile & frontend teams
+let sdk = SdkGenerator::new("Shop App", "1.0.0")
+    .type_schema("Product", vec![("id", "string"), ("name", "string"), ("price", "number")])
+    .endpoint("GET", "/api/products", None, "Product[]", "Fetch product catalog");
+let typescript_code = sdk.to_typescript();
+let dart_code = sdk.to_dart();
+
+// 2. Desktop Platform Adapter: Offline Workstation Sync Queue
+let sync_queue = OfflineSyncQueue::new();
+let tx_id = sync_queue.enqueue(
+    "dispatch_order",
+    "/api/orders/dispatch",
+    serde_json::json!({ "orderId": "ORD-101", "dock": "Station-B" }),
+    "idemp_98102"
+);
+// Workstation continues processing offline; drains and replays when connected:
+sync_queue.mark_synced(&tx_id);
+
+// 3. IoT & Hardware Adapter: Device Registry & Barcode/RFID Scanners
+let registry = DeviceRegistry::new();
+registry.register("scanner_01", "Handheld Zebra Gun", "psk_hardware_secret", "barcode_scanner");
+
+let scan = BarcodeScanEvent::new("scanner_01", "079357318921", "UPC-A")
+    .location("Warehouse-Bay-3");
+
+if registry.verify_signature(&scan.device_id, &scan.barcode, "psk_hardware_secret") {
+    // Verified hardware scan feeds directly into central order & inventory state
+}
 ```
 
 ---
@@ -349,6 +376,9 @@ terminus make:migration <name>        # Scaffold a timestamped SQL migration
 terminus migrate                      # Run pending database migrations
 terminus db:tables                    # Inspect database schema and statistics
 terminus db:seed                      # Seed initial database records
+terminus make:sdk [--lang=ts|dart]    # Export typed client SDK for mobile & frontend
+terminus make:desktop [Name]          # Scaffold Tauri / desktop workstation offline bridge
+terminus make:iot [DeviceId]          # Scaffold IoT hardware scanner & telemetry script
 terminus make:job <Name>              # Scaffold an asynchronous job
 terminus make:mail <Name>             # Scaffold a transactional mail message
 terminus make:token <name>            # Issue a personal access token

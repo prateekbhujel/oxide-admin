@@ -30,7 +30,11 @@ pub mod ws;
 pub mod prelude {
     pub use crate::app::{html_response, json_response, redirect_to, App};
     pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
-    pub use crate::client::{DesktopMessage, DeviceTelemetry, Platform, PushNotification};
+    pub use crate::client::{
+        BarcodeScanEvent, DesktopMessage, DeviceRecord, DeviceRegistry, DeviceTelemetry,
+        OfflineSyncQueue, OfflineSyncRecord, Platform, PushDispatcher, PushNotification,
+        SdkEndpoint, SdkGenerator,
+    };
     pub use crate::document::{ExcelDocument, PdfDocument};
     pub use crate::domain::{
         matches_permission, AuditLog, Order, OrderStatus, PermissionCache, Role, User, UserStatus,

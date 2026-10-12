@@ -1,3 +1,4 @@
+use terminus::client::SdkGenerator;
 use terminus::prompt;
 use terminus::token::{SqliteTokenStore, TokenRepository};
 use std::env;
@@ -69,6 +70,18 @@ fn main() {
             let bin = args.iter().find(|a| a.starts_with("--bin=")).map(|a| a.trim_start_matches("--bin="));
             make_cpanel(port, bin);
         }
+        "make:sdk" | "client:sdk" => {
+            let lang = args.iter().find(|a| a.starts_with("--lang=")).map(|a| a.trim_start_matches("--lang="));
+            make_sdk(lang);
+        }
+        "make:desktop" | "client:desktop" => {
+            let name = args.get(2).map(|s| s.as_str());
+            make_desktop(name);
+        }
+        "make:iot" | "client:iot" => {
+            let id = args.get(2).map(|s| s.as_str());
+            make_iot(id);
+        }
         "studio" | "tui" | "dashboard" | "pulse" | "inspector" => {
             let db_path = args.iter().find(|a| a.starts_with("--db=")).map(|a| a.trim_start_matches("--db=")).unwrap_or("terminus.db");
             let is_watch = args.iter().any(|a| a == "--watch" || a == "-w");
@@ -94,7 +107,7 @@ fn print_banner() {
 
 fn print_help() {
     print_banner();
-    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:cpanel\x1b[0m              Generate cPanel & shared hosting reverse proxy & deployment bundle\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:cpanel\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
+    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:cpanel\x1b[0m              Generate cPanel & shared hosting reverse proxy & deployment bundle\n  \x1b[33mmake:sdk [--lang=ts|dart]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:cpanel\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
 }
 
 fn print_version() {
@@ -1320,4 +1333,94 @@ fn revoke_token(id_opt: Option<&str>) {
         Ok(_) => prompt::info(format!("Token '{id}' revoked successfully.")),
         Err(e) => prompt::error(format!("Failed to revoke token: {e}")),
     }
+}
+
+fn make_sdk(lang: Option<&str>) {
+    let language = lang.unwrap_or("typescript");
+    let sdk_gen = SdkGenerator::new("Terminus App", "1.0.0")
+        .type_schema("User", vec![
+            ("id", "string"),
+            ("name", "string"),
+            ("email", "string"),
+            ("role", "string"),
+        ])
+        .type_schema("Order", vec![
+            ("id", "string"),
+            ("customerName", "string"),
+            ("total", "number"),
+            ("status", "string"),
+            ("createdAt", "string"),
+        ])
+        .endpoint("GET", "/api/orders", None, "Order[]", "List customer orders")
+        .endpoint("POST", "/api/orders", Some("Partial<Order>"), "Order", "Place a new order")
+        .endpoint("GET", "/api/user/profile", None, "User", "Get authenticated user profile");
+
+    let code = match language {
+        "dart" | "flutter" => sdk_gen.to_dart(),
+        _ => sdk_gen.to_typescript(),
+    };
+
+    let filename = if language == "dart" || language == "flutter" {
+        "terminus_client.dart"
+    } else {
+        "terminus-client.ts"
+    };
+
+    if let Err(e) = std::fs::write(filename, code) {
+        eprintln!("\x1b[31mError writing SDK file:\x1b[0m {e}");
+        return;
+    }
+    println!("\x1b[32mSuccess:\x1b[0m Generated typed {} client SDK: \x1b[1m{}\x1b[0m", language, filename);
+}
+
+fn make_desktop(name_opt: Option<&str>) {
+    let name = name_opt.unwrap_or("TerminusDesktop");
+    let script = format!(r#"// Terminus Desktop (Tauri/Webview) Scaffolding for {name}
+import {{ invoke }} from '@tauri-apps/api/core';
+
+export async function executeOfflineAction(action: string, payload: any) {{
+  return await invoke('terminus_offline_sync', {{ action, payload }});
+}}
+"#);
+    if let Err(e) = std::fs::write("desktop_bridge.ts", script) {
+        eprintln!("\x1b[31mError writing desktop bridge:\x1b[0m {e}");
+        return;
+    }
+    println!("\x1b[32mSuccess:\x1b[0m Scaffolded desktop bridge for \x1b[1m{}\x1b[0m in desktop_bridge.ts", name);
+}
+
+fn make_iot(device_id_opt: Option<&str>) {
+    let device_id = device_id_opt.unwrap_or("scanner_hub_01");
+    let client_code = format!(r#"# Terminus IoT Device Client Script for {device_id}
+import time, json, urllib.request
+
+DEVICE_ID = "{device_id}"
+SECRET_KEY = "device_psk_secret"
+SERVER_URL = "http://127.0.0.1:3000/api/v1/iot/telemetry"
+
+def send_heartbeat():
+    payload = json.dumps({{
+        "device_id": DEVICE_ID,
+        "status": "online",
+        "metrics": {{"temperature": 23.5, "battery": 98.0}}
+    }}).encode("utf-8")
+    req = urllib.request.Request(SERVER_URL, data=payload, headers={{
+        "Content-Type": "application/json",
+        "X-Device-Id": DEVICE_ID,
+        "X-Device-Signature": SECRET_KEY
+    }})
+    try:
+        with urllib.request.urlopen(req) as resp:
+            print("Heartbeat sent, status:", resp.status)
+    except Exception as e:
+        print("Offline/Error:", e)
+
+if __name__ == "__main__":
+    send_heartbeat()
+"#);
+    if let Err(e) = std::fs::write("iot_client.py", client_code) {
+        eprintln!("\x1b[31mError writing IoT client script:\x1b[0m {e}");
+        return;
+    }
+    println!("\x1b[32mSuccess:\x1b[0m Generated IoT hardware client script for \x1b[1m{}\x1b[0m in iot_client.py", device_id);
 }

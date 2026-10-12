@@ -87,6 +87,10 @@ impl AdminPanel {
         self
     }
 
+    pub fn resource<R: Resource + 'static>(self, resource: R) -> Self {
+        self.register(resource)
+    }
+
     pub fn users(mut self, repo: Arc<dyn UserRepository>) -> Self {
         self.user_repo = Some(repo);
         self

@@ -48,6 +48,10 @@ path = "examples/saas_store.rs"
 name = "helpdesk"
 path = "examples/helpdesk.rs"
 
+[[example]]
+name = "universal_wms"
+path = "examples/universal_wms.rs"
+
 [profile.dev]
 debug = 1
 split-debuginfo = "unpacked"
