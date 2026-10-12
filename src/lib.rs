@@ -67,7 +67,8 @@ pub mod prelude {
         RowData,
     };
     pub use crate::scaffold::{
-        scaffold_project, DatabaseChoice, FrontendChoice, ProjectConfig, ProjectPreset,
+        parse_targets, scaffold_project, DatabaseChoice, FrontendChoice, ProjectConfig,
+        ProjectPreset, TargetPlatform,
     };
     pub use crate::studio::StudioApp;
     pub use crate::table::{

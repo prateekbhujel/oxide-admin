@@ -1,9 +1,9 @@
 //! Terminus Universal Application Engine
 //!
-//! Provides zero-friction, beginner-friendly application bootstrapping,
-//! fluent route registration, and multi-platform service orchestration
-//! without manual lifetime or concurrency boilerplate.
-
+//! Provides application bootstrapping, fluent route registration,
+//! and multi-platform service orchestration without manual lifetime
+//! or concurrency boilerplate.
+//!
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
@@ -13,7 +13,7 @@ use axum::{
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
-/// High-level, beginner-friendly Terminus Application Builder
+/// Terminus Application Builder
 #[derive(Clone)]
 pub struct App {
     pub name: String,

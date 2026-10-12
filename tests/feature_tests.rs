@@ -1896,5 +1896,90 @@ fn test_project_scaffolding_presets_and_frontends() {
     let _ = std::fs::remove_dir_all(&temp_base);
 }
 
+#[test]
+fn test_composable_platform_matrix_scaffolding() {
+    use terminus::prelude::*;
 
+    // 1. Target platform string parsing
+    assert_eq!(parse_targets("desktop"), vec![TargetPlatform::Desktop]);
+    assert_eq!(parse_targets("iot"), vec![TargetPlatform::IoT]);
+    assert_eq!(parse_targets("web,desktop"), vec![TargetPlatform::Web, TargetPlatform::Desktop]);
+    assert_eq!(
+        parse_targets("web,desktop,mobile"),
+        vec![TargetPlatform::Web, TargetPlatform::Desktop, TargetPlatform::Mobile]
+    );
+    assert_eq!(
+        parse_targets("all"),
+        vec![
+            TargetPlatform::Web,
+            TargetPlatform::Desktop,
+            TargetPlatform::Mobile,
+            TargetPlatform::IoT,
+        ]
+    );
 
+    let temp_base = std::env::temp_dir().join(format!("terminus_matrix_test_{}", std::process::id()));
+
+    // 2. Desktop-only scaffolding
+    let desk_dir = temp_base.join("desk_app");
+    let desk_config = ProjectConfig::new("desk_app")
+        .targets(vec![TargetPlatform::Desktop]);
+    assert!(desk_config.is_desktop_only());
+    assert!(!desk_config.has_target(TargetPlatform::Web));
+    assert!(!desk_config.has_target(TargetPlatform::IoT));
+
+    let desk_files = scaffold_project(&desk_dir, &desk_config).unwrap();
+    assert!(desk_files.iter().any(|f| f.ends_with("desktop/desktop_bridge.ts")));
+    assert!(desk_files.iter().any(|f| f.ends_with("desktop/README.md")));
+    assert!(!desk_files.iter().any(|f| f.to_string_lossy().contains("frontend")));
+    assert!(!desk_files.iter().any(|f| f.to_string_lossy().contains("iot")));
+    assert!(!desk_files.iter().any(|f| f.to_string_lossy().contains("mobile")));
+
+    let desk_main = std::fs::read_to_string(desk_dir.join("src/main.rs")).unwrap();
+    assert!(desk_main.contains("Terminus Desktop Workstation Engine"));
+    assert!(desk_main.contains("/api/desktop/sync"));
+
+    // 3. IoT-only scaffolding
+    let iot_dir = temp_base.join("iot_app");
+    let iot_config = ProjectConfig::new("iot_app")
+        .targets(vec![TargetPlatform::IoT]);
+    assert!(iot_config.is_iot_only());
+    assert!(!iot_config.has_target(TargetPlatform::Web));
+    assert!(!iot_config.has_target(TargetPlatform::Desktop));
+
+    let iot_files = scaffold_project(&iot_dir, &iot_config).unwrap();
+    assert!(iot_files.iter().any(|f| f.ends_with("iot/iot_client.py")));
+    assert!(iot_files.iter().any(|f| f.ends_with("iot/README.md")));
+    assert!(!iot_files.iter().any(|f| f.to_string_lossy().contains("frontend")));
+    assert!(!iot_files.iter().any(|f| f.to_string_lossy().contains("desktop")));
+
+    let iot_main = std::fs::read_to_string(iot_dir.join("src/main.rs")).unwrap();
+    assert!(iot_main.contains("Terminus IoT Hardware Scanner Gateway"));
+    assert!(iot_main.contains("/api/iot/telemetry"));
+
+    // 4. Web + Desktop hybrid with React
+    let hybrid_dir = temp_base.join("hybrid_app");
+    let hybrid_config = ProjectConfig::new("hybrid_app")
+        .targets(vec![TargetPlatform::Web, TargetPlatform::Desktop])
+        .frontend(FrontendChoice::React);
+
+    let hybrid_files = scaffold_project(&hybrid_dir, &hybrid_config).unwrap();
+    assert!(hybrid_files.iter().any(|f| f.ends_with("frontend/src/App.tsx")));
+    assert!(hybrid_files.iter().any(|f| f.ends_with("desktop/desktop_bridge.ts")));
+    assert!(!hybrid_files.iter().any(|f| f.to_string_lossy().contains("iot")));
+    assert!(!hybrid_files.iter().any(|f| f.to_string_lossy().contains("mobile")));
+
+    // 5. Web + Desktop + Mobile
+    let omni_dir = temp_base.join("omni_app");
+    let omni_config = ProjectConfig::new("omni_app")
+        .targets(vec![TargetPlatform::Web, TargetPlatform::Desktop, TargetPlatform::Mobile]);
+
+    let omni_files = scaffold_project(&omni_dir, &omni_config).unwrap();
+    assert!(omni_files.iter().any(|f| f.ends_with("desktop/desktop_bridge.ts")));
+    assert!(omni_files.iter().any(|f| f.ends_with("mobile/TerminusClient.swift")));
+    assert!(omni_files.iter().any(|f| f.ends_with("mobile/terminus_client.dart")));
+    assert!(!omni_files.iter().any(|f| f.to_string_lossy().contains("iot")));
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&temp_base);
+}

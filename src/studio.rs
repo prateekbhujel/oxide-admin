@@ -80,7 +80,7 @@ impl StudioApp {
 
         format!(
             r#"[1;36m╭────────────────────────────────────────────────────────────────────────────────────────────╮
-│  [1;37m⚡ TERMINUS STUDIO[0m [90m— Terminal Telemetry, Database & Cache Inspector[0m                        │
+│  [1;37mTERMINUS STUDIO [0m [90m— Terminal Telemetry, Database & Cache Inspector[0m                        │
 │  [32m● ONLINE[0m  │  DB: {db_status}  │  PID: [33m{pid}[0m  │  HOST: [35m{os}/{arch}[0m  │  [90m{time_str}[0m │
 ╰────────────────────────────────────────────────────────────────────────────────────────────╯[0m
 "#
@@ -222,7 +222,7 @@ impl StudioApp {
         let (redis_connected, latency) = self.probe_redis();
         let mut out = String::new();
 
-        out.push_str("[1;37m⚡ CACHE & REDIS TELEMETRY:[0m\n\n");
+        out.push_str("[1;37mCACHE & REDIS TELEMETRY:[0m\n\n");
 
         out.push_str("  ┌─────────────────────────────────┬─────────────────────────────────┐\n");
         out.push_str("  │ [35mREDIS DRIVER STATUS[0m             │ [36mMEMORY CACHE STORE[0m              │\n");

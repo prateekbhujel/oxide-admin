@@ -71,17 +71,32 @@ Scaffold a new project using the CLI wizard:
 cargo terminus new my_app
 ```
 
-The CLI wizard lets you select your stack preferences:
-- **Architecture Preset**: Universal (Web, Mobile, Desktop, IoT), Fullstack (Admin Dashboard), or Backend API (Headless).
-- **Frontend Template**: React 19 + TypeScript, Vue 3 + TypeScript, HTMX + Tailwind, or Headless (API only).
+The CLI wizard lets you compose your exact stack and client targets:
+- **Target Platforms**: Choose any combination:
+  - **Web**: HTTP Server, Admin Dashboard, REST & OpenAPI 3.0 specification.
+  - **Desktop**: Offline SQLite sync queue and Tauri / Electron IPC bridge.
+  - **Mobile**: Native Swift for iOS and Flutter/Dart for Android with Push Dispatchers.
+  - **IoT**: Hardware barcode scanners, HMAC device registry, and sensor streams.
+- **Frontend Template**: React 19 + TypeScript, Vue 3 + TypeScript, HTMX + Tailwind, or Built-in Admin Dashboard (zero build step).
 - **Database Engine**: SQLite (single-file, zero setup) or PostgreSQL.
 
-You can also run non-interactively with flags:
+You can also scaffold non-interactively with exact flags:
 
 ```bash
-terminus new my_app --preset=universal --frontend=react
-terminus new my_app --preset=fullstack --frontend=vue
-terminus new my_app --preset=backend
+# Desktop-only workstation (Tauri bridge + offline SQLite sync queue)
+terminus new warehouse_pos --targets=desktop
+
+# IoT-only hardware scanner gateway (HMAC device auth + telemetry script)
+terminus new scanner_hub --targets=iot
+
+# Both Web & Desktop with React 19 frontend
+terminus new store_manager --targets=web,desktop --frontend=react
+
+# Web, Desktop, and Mobile omni-channel ecosystem
+terminus new omni_retail --targets=web,desktop,mobile
+
+# All 4 platforms (Universal ecosystem)
+terminus new enterprise_wms --targets=all
 ```
 
 ### 2. Built-in Terminal Studio (TUI)

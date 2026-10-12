@@ -1,12 +1,82 @@
 //! Terminus Project Scaffolder & Installation Wizard
 //!
 //! Interactive project bootstrapping and template scaffolding
-//! supporting Fullstack (with React/Vue/HTMX), Backend API (headless),
-//! and Universal (Terminus Web, Mobile, Desktop & IoT) architecture presets.
+//! supporting Composable Target Platforms (Web, Desktop, Mobile, IoT), Fullstack,
+//! Backend API, and Universal architecture presets.
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+
+/// Target client platforms supported by Terminus
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TargetPlatform {
+    /// Web applications (HTTP Server, Admin Dashboard, REST & OpenAPI 3.0)
+    Web,
+    /// Desktop workstations (Offline SQLite sync queue, Tauri/Electron IPC bridge)
+    Desktop,
+    /// Mobile applications (Native Swift for iOS & Flutter/Dart for Android, Push notification dispatchers)
+    Mobile,
+    /// IoT hardware scanners (HMAC-SHA256 authenticated device registry, barcode event streams)
+    IoT,
+}
+
+impl TargetPlatform {
+    pub fn from_str_loose(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "web" | "w" | "browser" | "http" => Some(Self::Web),
+            "desktop" | "d" | "desk" | "tauri" | "electron" => Some(Self::Desktop),
+            "mobile" | "m" | "app" | "ios" | "android" | "flutter" => Some(Self::Mobile),
+            "iot" | "i" | "hardware" | "scanner" | "embedded" => Some(Self::IoT),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Desktop => "desktop",
+            Self::Mobile => "mobile",
+            Self::IoT => "iot",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Web => "Web (HTTP Server, Admin UI, REST & OpenAPI 3.0)",
+            Self::Desktop => "Desktop (Offline SQLite Sync Queue, Tauri IPC Bridge)",
+            Self::Mobile => "Mobile (Native Swift & Flutter/Dart SDKs, Push Dispatcher)",
+            Self::IoT => "IoT (Hardware Scanners, HMAC Device Registry, Sensor Streams)",
+        }
+    }
+}
+
+/// Parses a comma-separated string into a list of target platforms
+pub fn parse_targets(s: &str) -> Vec<TargetPlatform> {
+    let trimmed = s.trim().to_lowercase();
+    if trimmed == "all" || trimmed == "universal" {
+        return vec![
+            TargetPlatform::Web,
+            TargetPlatform::Desktop,
+            TargetPlatform::Mobile,
+            TargetPlatform::IoT,
+        ];
+    }
+    let mut targets = Vec::new();
+    for part in s.split(',') {
+        if let Some(t) = TargetPlatform::from_str_loose(part.trim()) {
+            if !targets.contains(&t) {
+                targets.push(t);
+            }
+        }
+    }
+    if targets.is_empty() {
+        vec![TargetPlatform::Web]
+    } else {
+        targets
+    }
+}
 
 /// Architecture presets available during project creation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +119,7 @@ impl ProjectPreset {
 /// Frontend client choices
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrontendChoice {
-    /// Headless API only (no frontend scaffolding)
+    /// Headless API or built-in Admin Dashboard (no separate frontend build step)
     None,
     /// React 19 + TypeScript (Vite & Tailwind CSS)
     React,
@@ -81,7 +151,7 @@ impl FrontendChoice {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::None => "None (Headless API only)",
+            Self::None => "None (Headless API / Built-in Admin Dashboard)",
             Self::React => "React 19 + TypeScript (Vite & Tailwind CSS)",
             Self::Vue => "Vue 3 + TypeScript (Vite & Tailwind CSS)",
             Self::Htmx => "HTMX + Tailwind CSS (Zero build step, SSR)",
@@ -127,6 +197,7 @@ impl DatabaseChoice {
 pub struct ProjectConfig {
     pub name: String,
     pub preset: ProjectPreset,
+    pub targets: Vec<TargetPlatform>,
     pub frontend: FrontendChoice,
     pub database: DatabaseChoice,
 }
@@ -136,6 +207,12 @@ impl ProjectConfig {
         Self {
             name: name.into(),
             preset: ProjectPreset::Universal,
+            targets: vec![
+                TargetPlatform::Web,
+                TargetPlatform::Desktop,
+                TargetPlatform::Mobile,
+                TargetPlatform::IoT,
+            ],
             frontend: FrontendChoice::None,
             database: DatabaseChoice::Sqlite,
         }
@@ -143,6 +220,26 @@ impl ProjectConfig {
 
     pub fn preset(mut self, preset: ProjectPreset) -> Self {
         self.preset = preset;
+        match preset {
+            ProjectPreset::Universal => {
+                self.targets = vec![
+                    TargetPlatform::Web,
+                    TargetPlatform::Desktop,
+                    TargetPlatform::Mobile,
+                    TargetPlatform::IoT,
+                ];
+            }
+            ProjectPreset::Fullstack | ProjectPreset::Backend => {
+                self.targets = vec![TargetPlatform::Web];
+            }
+        }
+        self
+    }
+
+    pub fn targets(mut self, targets: Vec<TargetPlatform>) -> Self {
+        if !targets.is_empty() {
+            self.targets = targets;
+        }
         self
     }
 
@@ -154,6 +251,25 @@ impl ProjectConfig {
     pub fn database(mut self, database: DatabaseChoice) -> Self {
         self.database = database;
         self
+    }
+
+    pub fn has_target(&self, platform: TargetPlatform) -> bool {
+        self.targets.contains(&platform)
+    }
+
+    pub fn is_desktop_only(&self) -> bool {
+        self.targets.len() == 1 && self.targets.contains(&TargetPlatform::Desktop)
+    }
+
+    pub fn is_iot_only(&self) -> bool {
+        self.targets.len() == 1 && self.targets.contains(&TargetPlatform::IoT)
+    }
+
+    pub fn is_universal(&self) -> bool {
+        self.has_target(TargetPlatform::Web)
+            && self.has_target(TargetPlatform::Desktop)
+            && self.has_target(TargetPlatform::Mobile)
+            && self.has_target(TargetPlatform::IoT)
     }
 }
 
@@ -189,25 +305,45 @@ pub fn scaffold_project(target_dir: &Path, config: &ProjectConfig) -> io::Result
     fs::write(&readme_path, readme)?;
     created_files.push(readme_path);
 
-    // 5. Frontend scaffolding (if selected)
-    match config.frontend {
-        FrontendChoice::React => {
-            let fe_files = scaffold_react_frontend(&target_dir.join("frontend"), config)?;
-            created_files.extend(fe_files);
+    // 5. Frontend scaffolding (only when Web target is active)
+    if config.has_target(TargetPlatform::Web) {
+        match config.frontend {
+            FrontendChoice::React => {
+                let fe_files = scaffold_react_frontend(&target_dir.join("frontend"), config)?;
+                created_files.extend(fe_files);
+            }
+            FrontendChoice::Vue => {
+                let fe_files = scaffold_vue_frontend(&target_dir.join("frontend"), config)?;
+                created_files.extend(fe_files);
+            }
+            FrontendChoice::Htmx => {
+                let public_dir = target_dir.join("public");
+                fs::create_dir_all(&public_dir)?;
+                let htmx_html = generate_htmx_index(config);
+                let htmx_path = public_dir.join("index.html");
+                fs::write(&htmx_path, htmx_html)?;
+                created_files.push(htmx_path);
+            }
+            FrontendChoice::None => {}
         }
-        FrontendChoice::Vue => {
-            let fe_files = scaffold_vue_frontend(&target_dir.join("frontend"), config)?;
-            created_files.extend(fe_files);
-        }
-        FrontendChoice::Htmx => {
-            let public_dir = target_dir.join("public");
-            fs::create_dir_all(&public_dir)?;
-            let htmx_html = generate_htmx_index(config);
-            let htmx_path = public_dir.join("index.html");
-            fs::write(&htmx_path, htmx_html)?;
-            created_files.push(htmx_path);
-        }
-        FrontendChoice::None => {}
+    }
+
+    // 6. Desktop Workstation scaffolding (if Desktop target is active)
+    if config.has_target(TargetPlatform::Desktop) {
+        let desk_files = scaffold_desktop_target(&target_dir.join("desktop"), config)?;
+        created_files.extend(desk_files);
+    }
+
+    // 7. Mobile SDK & App scaffolding (if Mobile target is active)
+    if config.has_target(TargetPlatform::Mobile) {
+        let mob_files = scaffold_mobile_target(&target_dir.join("mobile"), config)?;
+        created_files.extend(mob_files);
+    }
+
+    // 8. IoT Hardware Scanner scaffolding (if IoT target is active)
+    if config.has_target(TargetPlatform::IoT) {
+        let iot_files = scaffold_iot_target(&target_dir.join("iot"), config)?;
+        created_files.extend(iot_files);
     }
 
     Ok(created_files)
@@ -233,13 +369,191 @@ chrono = "0.4"
     )
 }
 
-/// Generates src/main.rs tailored to the chosen preset and frontend
+/// Generates src/main.rs tailored to the selected platforms and preset
 pub fn generate_main_rs(config: &ProjectConfig) -> String {
     let app_name = &config.name;
 
-    match config.preset {
-        ProjectPreset::Universal => {
-            let tmpl = r#"use terminus::prelude::*;
+    // 1. IoT-only gateway
+    if config.is_iot_only() {
+        let tmpl = r#"use terminus::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Database::open("{{NAME}}.db")?;
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS telemetry_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            temperature REAL,
+            battery REAL,
+            timestamp TEXT NOT NULL
+        )",
+        [],
+    )?;
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS scan_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            barcode TEXT NOT NULL,
+            scanned_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    println!("Terminus IoT Hardware Scanner Gateway [{{NAME}}] online:");
+    println!("  -> Telemetry Ingest : http://127.0.0.1:3000/api/iot/telemetry");
+    println!("  -> Barcode Scanner  : http://127.0.0.1:3000/api/iot/scan");
+    println!("  -> Hardware Client  : ./iot/iot_client.py");
+    println!("  -> Terminal Studio  : run `cargo terminus studio` to inspect sensor telemetry");
+
+    App::new()
+        .port(3000)
+        .database(db)
+        .get("/", || async {
+            json_response(serde_json::json!({
+                "gateway": "{{NAME}}",
+                "mode": "iot_only",
+                "status": "online",
+                "protocol": "HMAC-SHA256"
+            }))
+        })
+        .group("/api/iot", |api| {
+            api.post("/telemetry", || async {
+                json_response(serde_json::json!({
+                    "acknowledged": true,
+                    "timestamp": now()
+                }))
+            })
+            .post("/scan", || async {
+                json_response(serde_json::json!({
+                    "processed": true,
+                    "action": "inventory_lookup"
+                }))
+            })
+        })
+        .run()
+        .await?;
+
+    Ok(())
+}
+"#;
+        return tmpl.replace("{{NAME}}", app_name);
+    }
+
+    // 2. Desktop-only workstation
+    if config.is_desktop_only() {
+        let tmpl = r#"use terminus::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Database::open("{{NAME}}.db")?;
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS workstation_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            synced INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    println!("Terminus Desktop Workstation Engine [{{NAME}}] online:");
+    println!("  -> Local Database  : {{NAME}}.db");
+    println!("  -> Desktop Sync API: http://127.0.0.1:3000/api/desktop/sync");
+    println!("  -> IPC Bridge      : ./desktop/desktop_bridge.ts");
+    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect offline queue");
+
+    App::new()
+        .port(3000)
+        .database(db)
+        .get("/", || async {
+            json_response(serde_json::json!({
+                "workstation": "{{NAME}}",
+                "mode": "desktop_only",
+                "status": "online",
+                "offlineQueue": "active"
+            }))
+        })
+        .group("/api/desktop", |api| {
+            api.get("/status", || async {
+                json_response(serde_json::json!({
+                    "isOnline": true,
+                    "pendingMutations": 0,
+                    "lastSync": now()
+                }))
+            })
+            .post("/sync", || async {
+                json_response(serde_json::json!({
+                    "synced": 0,
+                    "conflicts": 0,
+                    "status": "up_to_date"
+                }))
+            })
+        })
+        .run()
+        .await?;
+
+    Ok(())
+}
+"#;
+        return tmpl.replace("{{NAME}}", app_name);
+    }
+
+    // 3. Multi-platform engines (Web + Desktop, Web + Desktop + Mobile, Universal, etc.)
+    let has_web = config.has_target(TargetPlatform::Web);
+    let has_desktop = config.has_target(TargetPlatform::Desktop);
+    let has_mobile = config.has_target(TargetPlatform::Mobile);
+    let has_iot = config.has_target(TargetPlatform::IoT);
+
+    if has_desktop || has_mobile || has_iot {
+        let mut platform_prints = Vec::new();
+        let mut platform_targets = Vec::new();
+
+        if has_web {
+            platform_prints.push("    println!(\"  -> Web Application : http://localhost:3000\");".to_string());
+            platform_prints.push("    println!(\"  -> OpenAPI Specs   : http://localhost:3000/api/openapi.json\");".to_string());
+            platform_targets.push("\"web\"".to_string());
+        }
+        if has_desktop {
+            platform_prints.push("    println!(\"  -> Desktop Sync API: http://localhost:3000/api/desktop/sync\");".to_string());
+            platform_targets.push("\"desktop\"".to_string());
+        }
+        if has_mobile {
+            platform_prints.push("    println!(\"  -> Mobile SDK API  : http://localhost:3000/api/v1\");".to_string());
+            platform_targets.push("\"mobile\"".to_string());
+        }
+        if has_iot {
+            platform_prints.push("    println!(\"  -> IoT Scanner API : http://localhost:3000/api/iot/telemetry\");".to_string());
+            platform_targets.push("\"iot\"".to_string());
+        }
+
+        let desktop_group = if has_desktop {
+            r#"        .group("/api/desktop", |desktop| {
+            desktop.get("/status", || async {
+                json_response(serde_json::json!({ "isOnline": true, "pending": 0 }))
+            })
+            .post("/sync", || async {
+                json_response(serde_json::json!({ "synced": 0, "conflicts": 0 }))
+            })
+        })"#
+        } else {
+            ""
+        };
+
+        let iot_group = if has_iot {
+            r#"        .group("/api/iot", |iot| {
+            iot.post("/telemetry", || async {
+                json_response(serde_json::json!({ "acknowledged": true, "timestamp": now() }))
+            })
+            .post("/scan", || async {
+                json_response(serde_json::json!({ "processed": true }))
+            })
+        })"#
+        } else {
+            ""
+        };
+
+        let tmpl = r#"use terminus::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -261,11 +575,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .endpoint(SdkEndpoint::get("getItems", "/api/v1/items", "Fetch active inventory items"))
         .endpoint(SdkEndpoint::post("createItem", "/api/v1/items", "Create a new inventory item"));
 
-    println!("⚡ Terminus Engine [{{NAME}}] ready across 4 touchpoints:");
-    println!("  -> Web Admin UI   : http://localhost:3000/admin");
-    println!("  -> OpenAPI Specs  : http://localhost:3000/api/openapi.json");
-    println!("  -> Mobile SDK API : http://localhost:3000/api/v1");
-    println!("  -> Terminal TUI   : run `cargo terminus studio` to inspect telemetry");
+    println!("Terminus Unified Platform Engine [{{NAME}}] online across touchpoints:");
+{{PLATFORM_PRINTS}}
+    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect live telemetry");
 
     // 3. Bootstrap fluent, zero-boilerplate application engine
     App::new()
@@ -276,62 +588,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             json_response(serde_json::json!({
                 "app": "{{NAME}}",
                 "status": "online",
-                "preset": "universal",
+                "targets": [{{PLATFORM_TARGETS}}],
                 "docs": "/api/openapi.json"
             }))
         })
         .group("/api/v1", |api| {
             api.get("/items", || async {
                 json_response(serde_json::json!([
-                    { "id": 1, "title": "Universal Gateway", "status": "active" },
-                    { "id": 2, "title": "Mobile Telemetry Node", "status": "active" }
+                    { "id": 1, "title": "Primary Inventory Node", "status": "active" },
+                    { "id": 2, "title": "Field Workstation Sync", "status": "active" }
                 ]))
             })
             .post("/items", || async {
                 json_response(serde_json::json!({ "created": true, "id": 3 }))
             })
         })
+{{DESKTOP_GROUP}}
+{{IOT_GROUP}}
         .run()
         .await?;
 
     Ok(())
 }
 "#;
-            tmpl.replace("{{NAME}}", app_name)
-        }
+        return tmpl
+            .replace("{{NAME}}", app_name)
+            .replace("{{PLATFORM_PRINTS}}", &platform_prints.join("\n"))
+            .replace("{{PLATFORM_TARGETS}}", &platform_targets.join(", "))
+            .replace("{{DESKTOP_GROUP}}\n", if desktop_group.is_empty() { "" } else { desktop_group })
+            .replace("{{IOT_GROUP}}\n", if iot_group.is_empty() { "" } else { iot_group });
+    }
 
-        ProjectPreset::Fullstack => {
-            let tmpl = r#"use terminus::prelude::*;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::open("{{NAME}}.db")?;
-
-    println!("⚡ Terminus Fullstack [{{NAME}}] starting...");
-    println!("  -> Web Application : http://localhost:3000");
-    println!("  -> API Endpoints   : http://localhost:3000/api/v1");
-
-    App::new()
-        .port(3000)
-        .database(db)
-        .static_dir("/assets", "public")
-        .get("/", || async {
-            html_response("<!DOCTYPE html><html><head><title>{{NAME}}</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body class=\"bg-slate-950 text-slate-100 flex min-h-screen items-center justify-center p-6\"><div class=\"max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-8 text-center\"><h1 class=\"text-2xl font-bold text-white mb-2\">{{NAME}}</h1><p class=\"text-slate-400 text-sm mb-6\">Fullstack application powered by Rust & Axum.</p><div class=\"bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-emerald-400\">Connected to Terminus</div></div></body></html>")
-        })
-        .group("/api/v1", |api| {
-            api.get("/health", || async {
-                json_response(serde_json::json!({ "status": "healthy", "service": "{{NAME}}" }))
-            })
-        })
-        .run()
-        .await?;
-
-    Ok(())
-}
-"#;
-            tmpl.replace("{{NAME}}", app_name)
-        }
-
+    // 4. Web-only presets
+    match config.preset {
         ProjectPreset::Backend => {
             let tmpl = r#"use terminus::prelude::*;
 
@@ -344,8 +633,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .endpoint(SdkEndpoint::get("getHealth", "/api/v1/health", "Service health check"))
         .endpoint(SdkEndpoint::get("getRecords", "/api/v1/records", "List domain records"));
 
-    println!("⚡ Terminus Headless API [{{NAME}}] running on http://localhost:3000");
+    println!("Terminus Headless API [{{NAME}}] running on http://localhost:3000");
     println!("  -> OpenAPI Documentation : http://localhost:3000/api/openapi.json");
+    println!("  -> Terminal Studio       : run `cargo terminus studio` to inspect metrics");
 
     App::new()
         .port(3000)
@@ -364,6 +654,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     { "id": 1, "name": "Primary Database Node", "latency_ms": 0.4 },
                     { "id": 2, "name": "Telemetry Ingestion Worker", "latency_ms": 0.8 }
                 ]))
+            })
+        })
+        .run()
+        .await?;
+
+    Ok(())
+}
+"#;
+            tmpl.replace("{{NAME}}", app_name)
+        }
+        _ => {
+            let tmpl = r#"use terminus::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Database::open("{{NAME}}.db")?;
+
+    println!("Terminus Fullstack Application [{{NAME}}] online:");
+    println!("  -> Web Application : http://localhost:3000");
+    println!("  -> API Endpoints   : http://localhost:3000/api/v1");
+    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect metrics");
+
+    App::new()
+        .port(3000)
+        .database(db)
+        .static_dir("/assets", "public")
+        .get("/", || async {
+            html_response("<!DOCTYPE html><html><head><title>{{NAME}}</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body class=\"bg-slate-950 text-slate-100 flex min-h-screen items-center justify-center p-6\"><div class=\"max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-8 text-center\"><h1 class=\"text-2xl font-bold text-white mb-2\">{{NAME}}</h1><p class=\"text-slate-400 text-sm mb-6\">Fullstack application powered by Rust & Axum.</p><div class=\"bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-emerald-400\">Connected to Terminus</div></div></body></html>")
+        })
+        .group("/api/v1", |api| {
+            api.get("/health", || async {
+                json_response(serde_json::json!({ "status": "healthy", "service": "{{NAME}}" }))
             })
         })
         .run()
@@ -401,10 +723,82 @@ APP_KEY=terminus_secret_key_change_in_production
 
 /// Generates README.md for the new project
 pub fn generate_readme(config: &ProjectConfig) -> String {
-    let fe_instructions = match config.frontend {
-        FrontendChoice::React | FrontendChoice::Vue => format!(
-            r#"
-### Frontend Development ({fe})
+    let targets_str = config
+        .targets
+        .iter()
+        .map(|t| t.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let mut instructions = Vec::new();
+
+    // 1. Backend instructions
+    instructions.push(
+        r#"### 1. Run the Backend Application
+
+```bash
+cargo run
+```
+The application server will start listening at `http://localhost:3000`."#
+            .to_string(),
+    );
+
+    // 2. Studio TUI
+    instructions.push(
+        r#"### 2. Launch the Terminus Studio TUI
+
+Inspect database tables, cache probes, queue depth, and live telemetry:
+
+```bash
+cargo terminus studio
+```"#
+            .to_string(),
+    );
+
+    // 3. Desktop instructions
+    if config.has_target(TargetPlatform::Desktop) {
+        instructions.push(
+            r#"### Desktop Workstation Integration
+
+The `./desktop` directory contains the TypeScript bridge and IPC models for Tauri/Electron:
+```bash
+cat desktop/desktop_bridge.ts
+```"#
+                .to_string(),
+        );
+    }
+
+    // 4. Mobile instructions
+    if config.has_target(TargetPlatform::Mobile) {
+        instructions.push(
+            r#"### Mobile Application Clients
+
+Native Swift (iOS) and Flutter/Dart (Android) clients are located in `./mobile`:
+- iOS: `mobile/TerminusClient.swift`
+- Android / Flutter: `mobile/terminus_client.dart`"#
+                .to_string(),
+        );
+    }
+
+    // 5. IoT instructions
+    if config.has_target(TargetPlatform::IoT) {
+        instructions.push(
+            r#"### IoT Hardware Scanners
+
+Test sensor telemetry and barcode scanning with the Python client:
+```bash
+python3 iot/iot_client.py
+```"#
+                .to_string(),
+        );
+    }
+
+    // 6. Web frontend instructions
+    if config.has_target(TargetPlatform::Web) {
+        match config.frontend {
+            FrontendChoice::React | FrontendChoice::Vue => {
+                instructions.push(format!(
+                    r#"### Frontend Development ({fe})
 
 1. Navigate to the frontend directory:
    ```bash
@@ -418,22 +812,53 @@ pub fn generate_readme(config: &ProjectConfig) -> String {
    ```bash
    npm run dev
    ```
-   The frontend automatically proxies `/api/*` requests to the Terminus backend on port 3000.
-"#,
-            fe = config.frontend.display_name()
-        ),
-        FrontendChoice::Htmx => r#"
-### Frontend (HTMX)
-Zero build steps required! Static HTMX assets are served directly from `./public/index.html`.
-"#.to_string(),
-        FrontendChoice::None => "".to_string(),
-    };
+   The frontend automatically proxies `/api/*` requests to the Terminus backend on port 3000."#,
+                    fe = config.frontend.display_name()
+                ));
+            }
+            FrontendChoice::Htmx => {
+                instructions.push(
+                    r#"### Frontend (HTMX)
+
+Zero build steps required! Static HTMX assets are served directly from `./public/index.html`."#
+                        .to_string(),
+                );
+            }
+            FrontendChoice::None => {}
+        }
+    }
+
+    // Directory tree
+    let mut tree = Vec::new();
+    tree.push("├── Cargo.toml          # Rust dependencies & package configuration");
+    tree.push("├── src/");
+    tree.push("│   └── main.rs         # Terminus application bootstrap & routing");
+    tree.push("├── .env.example        # Environment variables template");
+
+    if config.has_target(TargetPlatform::Web) {
+        if matches!(config.frontend, FrontendChoice::React | FrontendChoice::Vue) {
+            tree.push("├── frontend/           # Modern TypeScript client (Vite + Tailwind)");
+        } else if matches!(config.frontend, FrontendChoice::Htmx) {
+            tree.push("├── public/             # Static HTML & HTMX assets");
+        }
+    }
+    if config.has_target(TargetPlatform::Desktop) {
+        tree.push("├── desktop/            # Desktop workstation IPC bridge & Tauri guide");
+    }
+    if config.has_target(TargetPlatform::Mobile) {
+        tree.push("├── mobile/             # Native Swift & Flutter/Dart mobile clients");
+    }
+    if config.has_target(TargetPlatform::IoT) {
+        tree.push("├── iot/                # IoT hardware scanner & telemetry scripts");
+    }
+    tree.push("└── README.md");
 
     format!(
         r#"# {name}
 
 Powered by **Terminus Framework** — The universal fullstack application framework for Rust & Axum.
 
+- **Target Platforms**: `{targets}`
 - **Architecture Preset**: `{preset}`
 - **Frontend Choice**: `{frontend}`
 - **Database Engine**: `{database}`
@@ -442,44 +867,367 @@ Powered by **Terminus Framework** — The universal fullstack application framew
 
 ## Getting Started
 
-### 1. Run the Backend Application
+{instructions_rendered}
 
-```bash
-cargo run
-```
-The server will start listening at `http://localhost:3000`.
-
-### 2. Launch the Terminus Studio TUI
-
-Terminus includes an interactive terminal UI dashboard to inspect your database, queues, cache, and telemetry:
-
-```bash
-cargo terminus studio
-```
-{fe_instructions}
 ## Project Structure
 
 ```
-├── Cargo.toml          # Rust dependencies & package configuration
-├── src/
-│   └── main.rs         # Terminus application bootstrap & routing
-├── .env.example        # Environment variables template
-{fe_tree}└── README.md
+{tree_rendered}
 ```
 "#,
         name = config.name,
+        targets = targets_str,
         preset = config.preset.as_str(),
         frontend = config.frontend.as_str(),
         database = config.database.as_str(),
-        fe_instructions = fe_instructions,
-        fe_tree = if matches!(config.frontend, FrontendChoice::React | FrontendChoice::Vue) {
-            "├── frontend/           # Modern TypeScript client (Vite + Tailwind)\n"
-        } else if matches!(config.frontend, FrontendChoice::Htmx) {
-            "├── public/             # Static HTML & HTMX assets\n"
-        } else {
-            ""
-        }
+        instructions_rendered = instructions.join("\n\n"),
+        tree_rendered = tree.join("\n"),
     )
+}
+
+/// Scaffolds Desktop target files (Tauri IPC bridge and offline sync documentation)
+pub fn scaffold_desktop_target(dest_dir: &Path, config: &ProjectConfig) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    fs::create_dir_all(dest_dir)?;
+
+    let bridge_ts = format!(
+        r#"/**
+ * Terminus Desktop IPC Bridge
+ * Type-safe integration for Tauri and Electron desktop workstations.
+ * Connects to Terminus local SQLite store with background cloud sync.
+ */
+
+export interface OfflineAction {{
+  id: string;
+  entity: string;
+  action: 'create' | 'update' | 'delete';
+  payload: Record<string, unknown>;
+  timestamp: string;
+}}
+
+export interface SyncResult {{
+  synced: number;
+  conflicts: number;
+  remaining: number;
+  status: 'up_to_date' | 'conflicts_detected' | 'offline';
+}}
+
+export class TerminusDesktopBridge {{
+  private baseUrl: string;
+
+  constructor(baseUrl = 'http://127.0.0.1:3000') {{
+    this.baseUrl = baseUrl;
+  }}
+
+  /** Checks desktop workstation engine status */
+  async getStatus(): Promise<{{ isOnline: boolean; pending: number }}> {{
+    const res = await fetch(`${{this.baseUrl}}/api/desktop/status`);
+    if (!res.ok) throw new Error(`Status check failed: ${{res.statusText}}`);
+    return res.json();
+  }}
+
+  /** Replays queued offline mutations against the Terminus server */
+  async triggerSync(): Promise<SyncResult> {{
+    const res = await fetch(`${{this.baseUrl}}/api/desktop/sync`, {{ method: 'POST' }});
+    if (!res.ok) throw new Error(`Desktop sync failed: ${{res.statusText}}`);
+    return res.json();
+  }}
+}}
+
+export const desktopBridge = new TerminusDesktopBridge();
+"#,
+    );
+    let b_path = dest_dir.join("desktop_bridge.ts");
+    fs::write(&b_path, bridge_ts)?;
+    files.push(b_path);
+
+    let readme_content = format!(
+        r#"# {name} — Desktop Workstation Target
+
+This directory contains the desktop workstation integration for **{name}**.
+
+## Features
+
+- **Offline SQLite Storage**: All domain operations write locally first, ensuring zero latency and 100% offline uptime.
+- **Tauri / Electron IPC Bridge**: `desktop_bridge.ts` provides typed synchronization with the Terminus engine.
+- **Conflict-Free Replay**: Offline mutations are queued and replayed against the cloud when connectivity resumes.
+
+## Quickstart with Tauri
+
+1. Initialize Tauri in your workstation frontend:
+   ```bash
+   npm create tauri-app@latest
+   ```
+2. Import `desktop_bridge.ts` to connect to Terminus:
+   ```typescript
+   import {{ desktopBridge }} from './desktop/desktop_bridge';
+
+   const status = await desktopBridge.getStatus();
+   console.log('Workstation online:', status.isOnline);
+   ```
+"#,
+        name = config.name
+    );
+    let r_path = dest_dir.join("README.md");
+    fs::write(&r_path, readme_content)?;
+    files.push(r_path);
+
+    Ok(files)
+}
+
+/// Scaffolds Mobile target files (Swift client for iOS, Dart client for Flutter/Android)
+pub fn scaffold_mobile_target(dest_dir: &Path, config: &ProjectConfig) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    fs::create_dir_all(dest_dir)?;
+
+    let swift_code = format!(
+        r#"//
+//  TerminusClient.swift
+//  {name} Mobile Client (iOS)
+//  Powered by Terminus Framework
+//
+
+import Foundation
+
+public struct Item: Codable, Identifiable {{
+    public let id: Int
+    public let title: String
+    public let status: String
+}}
+
+public class TerminusClient: ObservableObject {{
+    private let baseURL: URL
+    private var token: String?
+
+    public init(baseURL: URL = URL(string: "http://localhost:3000")!) {{
+        self.baseURL = baseURL
+    }}
+
+    public func setBearerToken(_ token: String) {{
+        self.token = token
+    }}
+
+    public func fetchItems() async throws -> [Item] {{
+        let url = baseURL.appendingPathComponent("/api/v1/items")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let token = self.token {{
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }}
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {{
+            throw URLError(.badServerResponse)
+        }}
+
+        return try JSONDecoder().decode([Item].self, from: data)
+    }}
+}}
+"#,
+        name = config.name
+    );
+    let s_path = dest_dir.join("TerminusClient.swift");
+    fs::write(&s_path, swift_code)?;
+    files.push(s_path);
+
+    let dart_code = format!(
+        r#"//
+//  terminus_client.dart
+//  {name} Mobile Client (Flutter / Android / iOS)
+//  Powered by Terminus Framework
+//
+
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class Item {{
+  final int id;
+  final String title;
+  final String status;
+
+  Item({{required this.id, required this.title, required this.status}});
+
+  factory Item.fromJson(Map<String, dynamic> json) {{
+    return Item(
+      id: json['id'] as int,
+      title: json['title'] as String,
+      status: json['status'] as String,
+    );
+  }}
+}}
+
+class TerminusClient {{
+  final String baseUrl;
+  String? bearerToken;
+
+  TerminusClient({{this.baseUrl = 'http://10.0.2.2:3000'}});
+
+  void setBearerToken(String token) {{
+    bearerToken = token;
+  }}
+
+  Future<List<Item>> fetchItems() async {{
+    final uri = Uri.parse('$baseUrl/api/v1/items');
+    final headers = <String, String>{{
+      'Content-Type': 'application/json',
+    }};
+    if (bearerToken != null) {{
+      headers['Authorization'] = 'Bearer $bearerToken';
+    }}
+
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {{
+      final List<dynamic> list = jsonDecode(response.body);
+      return list.map((e) => Item.fromJson(e as Map<String, dynamic>)).toList();
+    }} else {{
+      throw Exception('Failed to load items: ${{response.statusCode}}');
+    }}
+  }}
+}}
+"#,
+        name = config.name
+    );
+    let d_path = dest_dir.join("terminus_client.dart");
+    fs::write(&d_path, dart_code)?;
+    files.push(d_path);
+
+    let readme_content = format!(
+        r#"# {name} — Mobile Client Target
+
+This directory contains native mobile SDK adapters for **{name}**.
+
+## Platforms
+
+- **iOS (Swift)**: `TerminusClient.swift` supports modern `async/await`, `ObservableObject`, and Bearer token auth.
+- **Android & Flutter (Dart)**: `terminus_client.dart` provides typed HTTP client methods with automatic JSON deserialization.
+
+## OpenAPI Specification
+
+Export the latest API contracts anytime:
+```bash
+cargo run --bin terminus -- make:sdk --lang=swift
+cargo run --bin terminus -- make:sdk --lang=dart
+cargo run --bin terminus -- make:sdk --lang=openapi
+```
+"#,
+        name = config.name
+    );
+    let r_path = dest_dir.join("README.md");
+    fs::write(&r_path, readme_content)?;
+    files.push(r_path);
+
+    Ok(files)
+}
+
+/// Scaffolds IoT target files (Python hardware scanner script and integration documentation)
+pub fn scaffold_iot_target(dest_dir: &Path, config: &ProjectConfig) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    fs::create_dir_all(dest_dir)?;
+
+    let py_code = format!(
+        r#"#!/usr/bin/env python3
+"""
+Terminus IoT Hardware Client — {name}
+Hardware scanner and sensor telemetry script.
+Authenticates with HMAC-SHA256 device signatures.
+"""
+
+import hashlib
+import hmac
+import json
+import time
+import urllib.request
+
+DEVICE_ID = "scanner_hw_01"
+SECRET_KEY = "terminus_device_secret_change_in_production"
+SERVER_URL = "http://localhost:3000/api/iot/telemetry"
+SCAN_URL = "http://localhost:3000/api/iot/scan"
+
+def sign_payload(payload_bytes: bytes) -> str:
+    return hmac.new(SECRET_KEY.encode('utf-8'), payload_bytes, hashlib.sha256).hexdigest()
+
+def send_heartbeat():
+    payload = json.dumps({{
+        "device_id": DEVICE_ID,
+        "status": "online",
+        "battery": 98.5,
+        "temperature_c": 22.4,
+        "timestamp": int(time.time()),
+    }}).encode("utf-8")
+
+    req = urllib.request.Request(
+        SERVER_URL,
+        data=payload,
+        headers={{
+            "Content-Type": "application/json",
+            "X-Device-Id": DEVICE_ID,
+            "X-Device-Signature": sign_payload(payload),
+        }}
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            print("[IoT Client] Heartbeat sent, HTTP status:", resp.status)
+    except Exception as e:
+        print("[IoT Client] Telemetry report failed:", e)
+
+def send_barcode_scan(barcode: str):
+    payload = json.dumps({{
+        "device_id": DEVICE_ID,
+        "barcode": barcode,
+        "timestamp": int(time.time()),
+    }}).encode("utf-8")
+
+    req = urllib.request.Request(
+        SCAN_URL,
+        data=payload,
+        headers={{
+            "Content-Type": "application/json",
+            "X-Device-Id": DEVICE_ID,
+            "X-Device-Signature": sign_payload(payload),
+        }}
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            print(f"[IoT Client] Barcode '{{barcode}}' processed, HTTP status:", resp.status)
+    except Exception as e:
+        print("[IoT Client] Barcode scan failed:", e)
+
+if __name__ == "__main__":
+    print("[IoT Client] Connecting to {name} gateway...")
+    send_heartbeat()
+    send_barcode_scan("TERM-984210-A")
+"#,
+        name = config.name
+    );
+    let py_path = dest_dir.join("iot_client.py");
+    fs::write(&py_path, py_code)?;
+    files.push(py_path);
+
+    let readme_content = format!(
+        r#"# {name} — IoT Hardware Scanner Target
+
+This directory contains hardware device scripts and documentation for **{name}**.
+
+## Features
+
+- **HMAC-SHA256 Device Signatures**: Hardware devices compute SHA-256 HMAC signatures to guarantee authentic payload delivery.
+- **Barcode & RFID Scanning**: Dedicated endpoints for inventory scanners and barcode verification.
+- **Periodic Telemetry Heartbeats**: Reports device health, battery levels, and ambient temperatures.
+
+## Usage
+
+Run the Python hardware client:
+```bash
+python3 iot/iot_client.py
+```
+"#,
+        name = config.name
+    );
+    let r_path = dest_dir.join("README.md");
+    fs::write(&r_path, readme_content)?;
+    files.push(r_path);
+
+    Ok(files)
 }
 
 /// Generates HTML5 + HTMX template
@@ -517,7 +1265,6 @@ fn scaffold_react_frontend(dest_dir: &Path, config: &ProjectConfig) -> io::Resul
     let mut files = Vec::new();
     fs::create_dir_all(dest_dir.join("src"))?;
 
-    // package.json
     let pkg_json = format!(
         r#"{{
   "name": "{name}-frontend",
@@ -551,7 +1298,6 @@ fn scaffold_react_frontend(dest_dir: &Path, config: &ProjectConfig) -> io::Resul
     fs::write(&p_path, pkg_json)?;
     files.push(p_path);
 
-    // vite.config.ts with API proxy to port 3000
     let vite_config = r#"import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -572,7 +1318,6 @@ export default defineConfig({
     fs::write(&v_path, vite_config)?;
     files.push(v_path);
 
-    // tsconfig.json
     let tsconfig = r#"{
   "compilerOptions": {
     "target": "ES2022",
@@ -598,7 +1343,6 @@ export default defineConfig({
     fs::write(&ts_path, tsconfig)?;
     files.push(ts_path);
 
-    // index.html
     let index_html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -619,7 +1363,6 @@ export default defineConfig({
     fs::write(&idx_path, index_html)?;
     files.push(idx_path);
 
-    // src/main.tsx
     let main_tsx = r#"import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
@@ -634,7 +1377,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     fs::write(&m_path, main_tsx)?;
     files.push(m_path);
 
-    // src/App.tsx
     let app_tsx = format!(
         r#"import {{ useState, useEffect }} from 'react';
 
@@ -699,7 +1441,6 @@ fn scaffold_vue_frontend(dest_dir: &Path, config: &ProjectConfig) -> io::Result<
     let mut files = Vec::new();
     fs::create_dir_all(dest_dir.join("src"))?;
 
-    // package.json
     let pkg_json = format!(
         r#"{{
   "name": "{name}-frontend",
@@ -731,7 +1472,6 @@ fn scaffold_vue_frontend(dest_dir: &Path, config: &ProjectConfig) -> io::Result<
     fs::write(&p_path, pkg_json)?;
     files.push(p_path);
 
-    // vite.config.ts with API proxy to port 3000
     let vite_config = r#"import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
@@ -752,7 +1492,6 @@ export default defineConfig({
     fs::write(&v_path, vite_config)?;
     files.push(v_path);
 
-    // tsconfig.json
     let tsconfig = r#"{
   "compilerOptions": {
     "target": "ES2022",
@@ -778,7 +1517,6 @@ export default defineConfig({
     fs::write(&ts_path, tsconfig)?;
     files.push(ts_path);
 
-    // index.html
     let index_html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -799,7 +1537,6 @@ export default defineConfig({
     fs::write(&idx_path, index_html)?;
     files.push(idx_path);
 
-    // src/main.ts
     let main_ts = r#"import { createApp } from 'vue';
 import App from './App.vue';
 
@@ -809,7 +1546,6 @@ createApp(App).mount('#app');
     fs::write(&m_path, main_ts)?;
     files.push(m_path);
 
-    // src/App.vue
     let app_vue = format!(
         r#"<script setup lang="ts">
 import {{ ref, onMounted }} from 'vue';
