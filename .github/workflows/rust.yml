@@ -27,8 +27,8 @@ jobs:
       - name: Cargo Check
         run: cargo check --verbose
 
-      - name: Cargo Build Demo
-        run: cargo build --example demo --verbose
+      - name: Cargo Build Examples
+        run: cargo build --examples --verbose
 
       - name: Cargo Test
         run: cargo test --verbose
