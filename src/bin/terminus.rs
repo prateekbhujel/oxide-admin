@@ -1,5 +1,6 @@
 use terminus::client::SdkGenerator;
 use terminus::prompt;
+use terminus::scaffold::{scaffold_project, DatabaseChoice, FrontendChoice, ProjectConfig, ProjectPreset};
 use terminus::token::{SqliteTokenStore, TokenRepository};
 use std::env;
 use std::fs;
@@ -18,6 +19,14 @@ fn main() {
     match command {
         "help" | "--help" | "-h" => print_help(),
         "version" | "--version" | "-v" => print_version(),
+        "new" | "init" | "create" => {
+            let name_arg = args.get(2).map(|s| s.as_str());
+            let preset_arg = args.iter().find(|a| a.starts_with("--preset=")).map(|a| a.trim_start_matches("--preset="));
+            let frontend_arg = args.iter().find(|a| a.starts_with("--frontend=")).map(|a| a.trim_start_matches("--frontend="));
+            let db_arg = args.iter().find(|a| a.starts_with("--db=")).map(|a| a.trim_start_matches("--db="));
+            let non_interactive = args.iter().any(|a| a == "--yes" || a == "-y" || a == "--non-interactive");
+            run_new_project(name_arg, preset_arg, frontend_arg, db_arg, non_interactive);
+        }
         "make:resource" => {
             let name = args.get(2).map(|s| s.as_str());
             make_resource(name);
@@ -102,7 +111,7 @@ fn print_banner() {
 
 fn print_help() {
     print_banner();
-    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
+    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mnew [name]\x1b[0m               Scaffold a new Terminus project (interactive wizard or flags)\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus new my_project\n  terminus new my_app --preset=fullstack --frontend=react\n  terminus new my_api --preset=backend\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
 }
 
 fn print_version() {
@@ -1363,4 +1372,98 @@ if __name__ == "__main__":
         return;
     }
     println!("\x1b[32mSuccess:\x1b[0m Generated IoT hardware client script for \x1b[1m{}\x1b[0m in iot_client.py", device_id);
+}
+
+fn run_new_project(
+    name_opt: Option<&str>,
+    preset_opt: Option<&str>,
+    frontend_opt: Option<&str>,
+    db_opt: Option<&str>,
+    non_interactive: bool,
+) {
+    println!("\x1b[1;36mTerminus Application Scaffolder\x1b[0m\n");
+
+    let app_name = match name_opt {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ if non_interactive => "terminus_app".to_string(),
+        _ => match prompt::text("What is your project name?", Some("my-terminus-app"), None, true) {
+            Ok(n) if !n.is_empty() => n,
+            _ => "my-terminus-app".to_string(),
+        },
+    };
+
+    let preset = match preset_opt.and_then(ProjectPreset::from_str_loose) {
+        Some(p) => p,
+        None if non_interactive => ProjectPreset::Universal,
+        None => {
+            let options = [
+                ("universal", "Universal Ecosystem (Terminus style: Web Admin + Mobile APIs + Desktop Sync + IoT Streams)"),
+                ("fullstack", "Fullstack Application (Axum Backend + Embedded Admin Dashboard UI)"),
+                ("backend", "Backend API (High-throughput Headless JSON API + OpenAPI 3.0 Specs)"),
+            ];
+            let key = prompt::select("Choose architecture preset:", &options, 0).unwrap_or("universal");
+            ProjectPreset::from_str_loose(key).unwrap_or(ProjectPreset::Universal)
+        }
+    };
+
+    let frontend = match frontend_opt.and_then(FrontendChoice::from_str_loose) {
+        Some(f) => f,
+        None if non_interactive => match preset {
+            ProjectPreset::Fullstack => FrontendChoice::React,
+            _ => FrontendChoice::None,
+        },
+        None => {
+            let options = [
+                ("none", "None (Headless API only)"),
+                ("react", "React 19 + TypeScript (Vite & Tailwind CSS)"),
+                ("vue", "Vue 3 + TypeScript (Vite & Tailwind CSS)"),
+                ("htmx", "HTMX + Tailwind CSS (Zero JavaScript build step, SSR)"),
+            ];
+            let default_idx = if preset == ProjectPreset::Fullstack { 1 } else { 0 };
+            let key = prompt::select("Choose frontend client template:", &options, default_idx).unwrap_or("none");
+            FrontendChoice::from_str_loose(key).unwrap_or(FrontendChoice::None)
+        }
+    };
+
+    let database = match db_opt.and_then(DatabaseChoice::from_str_loose) {
+        Some(d) => d,
+        None if non_interactive => DatabaseChoice::Sqlite,
+        None => {
+            let options = [
+                ("sqlite", "SQLite (Zero configuration single-file database)"),
+                ("postgres", "PostgreSQL (Enterprise relational database)"),
+            ];
+            let key = prompt::select("Choose database engine:", &options, 0).unwrap_or("sqlite");
+            DatabaseChoice::from_str_loose(key).unwrap_or(DatabaseChoice::Sqlite)
+        }
+    };
+
+    let config = ProjectConfig::new(&app_name)
+        .preset(preset)
+        .frontend(frontend)
+        .database(database);
+
+    let target_dir = Path::new(&app_name);
+    match scaffold_project(target_dir, &config) {
+        Ok(created) => {
+            println!("\n\x1b[32m✔ Success:\x1b[0m Scaffolded \x1b[1m{}\x1b[0m project across {} files.\n", app_name, created.len());
+            println!("\x1b[1mConfiguration:\x1b[0m");
+            println!("  • Preset   : {}", config.preset.display_name());
+            println!("  • Frontend : {}", config.frontend.display_name());
+            println!("  • Database : {}", config.database.display_name());
+            println!("\n\x1b[1mNext steps:\x1b[0m");
+            println!("  1. cd {}", app_name);
+            println!("  2. cargo run                     \x1b[90m# Start backend on http://localhost:3000\x1b[0m");
+            println!("  3. cargo terminus studio         \x1b[90m# Launch interactive Terminal UI inspector\x1b[0m");
+            if matches!(frontend, FrontendChoice::React | FrontendChoice::Vue) {
+                println!("\n\x1b[1mFrontend:\x1b[0m");
+                println!("  cd frontend && npm install && npm run dev");
+            }
+            println!();
+        }
+        Err(e) => {
+            eprintln!("\x1b[31mError scaffolding project:\x1b[0m {e}");
+            std::process::exit(1);
+        }
+    }
 }

@@ -1823,5 +1823,78 @@ fn test_enhanced_testing_assertions() {
     expect(items).to_have_length(3);
 }
 
+#[test]
+fn test_project_scaffolding_presets_and_frontends() {
+    use terminus::prelude::*;
+
+    let temp_base = std::env::temp_dir().join(format!("terminus_scaffold_test_{}", std::process::id()));
+
+    // 1. Universal preset with React frontend
+    let app1_dir = temp_base.join("app1_universal_react");
+    let config1 = ProjectConfig::new("app1_universal_react")
+        .preset(ProjectPreset::Universal)
+        .frontend(FrontendChoice::React)
+        .database(DatabaseChoice::Sqlite);
+
+    let files1 = scaffold_project(&app1_dir, &config1).unwrap();
+    assert!(files1.iter().any(|f| f.ends_with("Cargo.toml")));
+    assert!(files1.iter().any(|f| f.ends_with("src/main.rs")));
+    assert!(files1.iter().any(|f| f.ends_with(".env.example")));
+    assert!(files1.iter().any(|f| f.ends_with("README.md")));
+    assert!(files1.iter().any(|f| f.ends_with("frontend/package.json")));
+    assert!(files1.iter().any(|f| f.ends_with("frontend/vite.config.ts")));
+    assert!(files1.iter().any(|f| f.ends_with("frontend/src/App.tsx")));
+
+    let cargo1 = std::fs::read_to_string(app1_dir.join("Cargo.toml")).unwrap();
+    assert!(cargo1.contains("name = \"app1_universal_react\""));
+    assert!(cargo1.contains("terminus-framework"));
+
+    let main1 = std::fs::read_to_string(app1_dir.join("src/main.rs")).unwrap();
+    assert!(main1.contains("Database::open(\"app1_universal_react.db\")"));
+    assert!(main1.contains("SdkGenerator::new(\"app1_universal_react\")"));
+
+    // 2. Fullstack preset with Vue frontend
+    let app2_dir = temp_base.join("app2_fullstack_vue");
+    let config2 = ProjectConfig::new("app2_fullstack_vue")
+        .preset(ProjectPreset::Fullstack)
+        .frontend(FrontendChoice::Vue)
+        .database(DatabaseChoice::Postgres);
+
+    let files2 = scaffold_project(&app2_dir, &config2).unwrap();
+    assert!(files2.iter().any(|f| f.ends_with("frontend/src/App.vue")));
+    assert!(files2.iter().any(|f| f.ends_with("frontend/package.json")));
+
+    let env2 = std::fs::read_to_string(app2_dir.join(".env.example")).unwrap();
+    assert!(env2.contains("postgres://"));
+
+    // 3. Headless Backend API preset (no frontend)
+    let app3_dir = temp_base.join("app3_backend_api");
+    let config3 = ProjectConfig::new("app3_backend_api")
+        .preset(ProjectPreset::Backend)
+        .frontend(FrontendChoice::None)
+        .database(DatabaseChoice::Sqlite);
+
+    let files3 = scaffold_project(&app3_dir, &config3).unwrap();
+    assert!(!files3.iter().any(|f| f.to_string_lossy().contains("frontend")));
+    let main3 = std::fs::read_to_string(app3_dir.join("src/main.rs")).unwrap();
+    assert!(main3.contains("Terminus Headless API"));
+
+    // 4. Fullstack preset with HTMX frontend
+    let app4_dir = temp_base.join("app4_htmx");
+    let config4 = ProjectConfig::new("app4_htmx")
+        .preset(ProjectPreset::Fullstack)
+        .frontend(FrontendChoice::Htmx)
+        .database(DatabaseChoice::Sqlite);
+
+    let files4 = scaffold_project(&app4_dir, &config4).unwrap();
+    assert!(files4.iter().any(|f| f.ends_with("public/index.html")));
+    let htmx_html = std::fs::read_to_string(app4_dir.join("public/index.html")).unwrap();
+    assert!(htmx_html.contains("htmx.org"));
+    assert!(htmx_html.contains("app4_htmx"));
+
+    // Clean up temporary files
+    let _ = std::fs::remove_dir_all(&temp_base);
+}
+
 
 

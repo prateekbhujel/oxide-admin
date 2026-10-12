@@ -63,6 +63,59 @@ Whether building high-throughput web backends, rich content management systems, 
 
 ## Quickstart
 
+### 1. Scaffold a New Project
+
+Scaffold a new project using the CLI wizard:
+
+```bash
+cargo terminus new my_app
+```
+
+The CLI wizard lets you select your stack preferences:
+- **Architecture Preset**: Universal (Web, Mobile, Desktop, IoT), Fullstack (Admin Dashboard), or Backend API (Headless).
+- **Frontend Template**: React 19 + TypeScript, Vue 3 + TypeScript, HTMX + Tailwind, or Headless (API only).
+- **Database Engine**: SQLite (single-file, zero setup) or PostgreSQL.
+
+You can also run non-interactively with flags:
+
+```bash
+terminus new my_app --preset=universal --frontend=react
+terminus new my_app --preset=fullstack --frontend=vue
+terminus new my_app --preset=backend
+```
+
+### 2. Built-in Terminal Studio (TUI)
+
+Terminus includes an interactive cross-platform terminal dashboard to inspect database records, memory and Redis caches, queue depths, API tokens, and live telemetry in real time:
+
+```bash
+cargo terminus studio
+```
+
+```text
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  TERMINUS STUDIO — Terminal Telemetry, Database & Cache Inspector                          │
+│  ONLINE  │  DB: CONNECTED (SQLite)  │  HOST: macos/aarch64  │  UTC Live Telemetry          │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+   [1] Overview  [2] Database  [3] Cache & Redis  [4] Queue  [5] API Tokens  [6] Mail Outbox  [7] Audit Logs  
+──────────────────────────────────────────────────────────────────────────────────────────────
+SYSTEM TELEMETRY & SERVICE HEALTH:
+
+  ┌──────────────────────┬──────────────────────┬──────────────────────┐
+  │ DATABASE (SQLite)    │ CACHE & KEY-VALUE    │ QUEUE & JOBS         │
+  │ Active Connections   │ In-Memory + Redis    │ 0 Pending Jobs       │
+  │ Path: terminus.db    │ Sub-millisecond TTL  │ Worker: Idle / Ready │
+  ├──────────────────────┼──────────────────────┼──────────────────────┤
+  │ API ACCESS TOKENS    │ AUDIT TRAIL LOGS     │ HTTP ENGINE          │
+  │ RFC 6234 Bearer Auth │ Immutable Append Log │ Axum 0.7 / Tokio     │
+  │ Abilities & Scopes   │ Forensics IP & Agent │ Zero GC Latency      │
+  └──────────────────────┴──────────────────────┴──────────────────────┘
+
+Shortcuts: [1-7] Switch Tab  [R] Refresh  [T <table_name>] Select Table  [Q] Exit
+```
+
+### 3. Add to an Existing Project
+
 Add Terminus to your `Cargo.toml`:
 
 ```toml
@@ -72,7 +125,7 @@ tokio = { version = "1", features = ["full"] }
 serde_json = "1.0"
 ```
 
-### 1. Minimal Web & API Application
+### 4. Minimal Web & API Application
 
 ```rust
 use terminus::prelude::*;
@@ -360,6 +413,7 @@ cargo install --path . --bin terminus
 Available commands:
 
 ```bash
+terminus new [name]                   # Scaffold a new application (interactive wizard or flags)
 terminus studio                       # Launch terminal UI telemetry dashboard
 terminus make:resource <Name>         # Scaffold an administrative resource
 terminus make:module <Name>           # Scaffold an enterprise domain module

@@ -18,6 +18,7 @@ pub mod query;
 pub mod queue;
 pub mod repository;
 pub mod resource;
+pub mod scaffold;
 pub mod studio;
 pub mod table;
 pub mod testing;
@@ -64,6 +65,9 @@ pub mod prelude {
     pub use crate::resource::{
         headline, to_camel_case, to_snake_case, AuditLogResource, FormMode, QueryState, Resource,
         RowData,
+    };
+    pub use crate::scaffold::{
+        scaffold_project, DatabaseChoice, FrontendChoice, ProjectConfig, ProjectPreset,
     };
     pub use crate::studio::StudioApp;
     pub use crate::table::{
