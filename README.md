@@ -2,7 +2,7 @@
 
 **An agent-native, batteries-included application framework for Axum and Rust.**
 
-Web Admin • REST API • SQLite Persistence • Machine Introspection (`schema --json`)
+Fullstack Web Admin • REST API • Multi-DB (PostgreSQL, MySQL, MongoDB, Redis, SQLite) • Native Mobile (iOS/Android) • Native Desktop & IoT
 
 [![CI](https://github.com/prateekbhujel/terminus/actions/workflows/rust.yml/badge.svg)](https://github.com/prateekbhujel/terminus/actions/workflows/rust.yml)
 [![Version: 0.1.0](https://img.shields.io/badge/crates.io-v0.1.0-emerald.svg)](https://crates.io/crates/terminus-framework)
@@ -13,10 +13,10 @@ Web Admin • REST API • SQLite Persistence • Machine Introspection (`schema
 
 ## Why Terminus?
 
-[Axum](https://github.com/tokio-rs/axum) is a world-class, high-performance web router. But it is intentionally minimal. For every production application, developers repeatedly re-implement the same foundational layers from scratch:
+[Axum](https://github.com/tokio-rs/axum) is a world-class, high-performance web router. But it is intentionally minimal. For production applications, developers repeatedly re-implement the same foundational layers from scratch:
 
 - An administrative dashboard and CRUD interfaces
-- SQLite persistence, connection management, and database migrations
+- Multi-database persistence, connection management, and migrations
 - Request validation with structured JSON error responses
 - Authentication, dynamic RBAC, and personal access tokens
 - **Deterministic machine introspection**, so autonomous AI coding agents can inspect models, routes, and database tables without hallucination
@@ -24,6 +24,7 @@ Web Admin • REST API • SQLite Persistence • Machine Introspection (`schema
 Terminus provides strong conventions and full-stack solutions to these needs, designed from first principles around what makes sense in Rust.
 
 ---
+
 ## 2-Minute Quickstart
 
 ### Method 1: The Global Installer (`terminus new`)
@@ -582,7 +583,7 @@ Terminus maintains a comprehensive test suite across feature tests, audit loggin
 cargo test
 ```
 
-All 66 unit and integration tests run in under 1 second with zero external service dependencies.
+All 68 unit and integration tests run in under 1 second with zero external service dependencies.
 
 ---
 
