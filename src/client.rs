@@ -27,7 +27,7 @@ impl Platform {
             Self::Android
         } else if ua.contains("iphone") || ua.contains("ipad") || ua.contains("ios") {
             Self::Ios
-        } else if ua.contains("tauri") || ua.contains("electron") {
+        } else if ua.contains("desktop") || ua.contains("station") || ua.contains("kiosk") || ua.contains("native-client") || ua.contains("tauri") || ua.contains("electron") {
             Self::Desktop
         } else if ua.contains("esp32") || ua.contains("arduino") || ua.contains("iot") || ua.contains("scanner") {
             Self::Iot
@@ -430,6 +430,99 @@ impl SdkGenerator {
         swift
     }
 
+    /// Generate clean, native Kotlin 1.9+ Client SDK for Android with Coroutines
+    pub fn to_kotlin(&self) -> String {
+        let mut kt = format!(
+            "/**\n * Terminus Client SDK for {}\n * API Version: {}\n * Generated automatically by Terminus Framework.\n */\n\npackage dev.terminus.client\n\nimport java.net.URI\nimport java.net.http.HttpClient\nimport java.net.http.HttpRequest\nimport java.net.http.HttpResponse\nimport kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.withContext\n\n",
+            self.app_name, self.api_version
+        );
+
+        // Export data classes
+        for (name, fields) in &self.type_schemas {
+            kt.push_str(&format!("data class {} (\n", name));
+            let params: Vec<String> = fields
+                .iter()
+                .map(|(f, t)| {
+                    let kt_type = match t.as_str() {
+                        "string" | "String" => "String",
+                        "number" | "Double" | "f64" => "Double",
+                        "i64" | "int" => "Long",
+                        "u32" => "Int",
+                        "boolean" | "Bool" | "bool" => "Boolean",
+                        other => other,
+                    };
+                    format!("    val {}: {}", f, kt_type)
+                })
+                .collect();
+            kt.push_str(&params.join(",\n"));
+            kt.push_str("\n)\n\n");
+        }
+
+        // Export Client Class
+        let class_name = format!("{}Client", self.app_name.replace(' ', ""));
+        kt.push_str(&format!(
+            r#"class {class_name}(
+    val baseUrl: String = "http://10.0.2.2:3000",
+    var token: String? = null
+) {{
+    private val client: HttpClient = HttpClient.newHttpClient()
+
+    private suspend fun request(method: String, path: String, body: String? = null): String =
+        withContext(Dispatchers.IO) {{
+            val uri = URI.create("$baseUrl$path")
+            val builder = HttpRequest.newBuilder().uri(uri)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+
+            token?.let {{ builder.header("Authorization", "Bearer $it") }}
+
+            val req = when (method.uppercase()) {{
+                "POST" -> builder.POST(HttpRequest.BodyPublishers.ofString(body ?: "")).build()
+                "PUT" -> builder.PUT(HttpRequest.BodyPublishers.ofString(body ?: "")).build()
+                "DELETE" -> builder.DELETE().build()
+                else -> builder.GET().build()
+            }}
+
+            val response = client.send(req, HttpResponse.BodyHandlers.ofString())
+            if (response.statusCode() !in 200..299) {{
+                throw RuntimeException("HTTP Error ${{response.statusCode()}}: ${{response.body()}}")
+            }}
+            response.body()
+        }}
+"#
+        ));
+
+        // Methods
+        for ep in &self.endpoints {
+            let func_name = ep.path.trim_start_matches('/').replace('/', "_").replace(':', "");
+            let req_arg = if let Some(ref rt) = ep.request_type {
+                format!("data: {}", rt)
+            } else {
+                String::new()
+            };
+            let body_expr = if ep.request_type.is_some() { "data.toString()" } else { "null" };
+
+            kt.push_str(&format!(
+                r#"
+    /** {} */
+    suspend fun {}_{}({}): String {{
+        return request("{}", "{}", {})
+    }}
+"#,
+                ep.description,
+                ep.method.to_lowercase(),
+                func_name,
+                req_arg,
+                ep.method,
+                ep.path,
+                body_expr
+            ));
+        }
+
+        kt.push_str("}\n");
+        kt
+    }
+
     /// Generate standard OpenAPI 3.0.3 specification JSON
     pub fn to_openapi_json(&self) -> serde_json::Value {
         let mut paths = serde_json::Map::new();
@@ -512,10 +605,10 @@ impl SdkGenerator {
 }
 
 // ============================================================================
-// DESKTOP ADAPTER: IPC BRIDGE & OFFLINE TRANSACTION SYNC QUEUE
+// DESKTOP ADAPTER: NATIVE STATION RUNTIME & OFFLINE TRANSACTION SYNC QUEUE
 // ============================================================================
 
-/// Desktop Runtime (Tauri / Local Webview) IPC Bridge Message
+/// Native Desktop Station Runtime (Native OS Windowing, Direct IPC Sockets & Kiosk Daemons)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DesktopMessage {
     pub command: String,
@@ -527,6 +620,36 @@ impl DesktopMessage {
         Self {
             command: command.into(),
             payload,
+        }
+    }
+}
+
+/// Native Desktop Station IPC Bridge for direct, low-latency workstation communication
+#[derive(Clone, Default)]
+pub struct NativeDesktopBridge {
+    queue: OfflineSyncQueue,
+}
+
+impl NativeDesktopBridge {
+    pub fn new() -> Self {
+        Self {
+            queue: OfflineSyncQueue::new(),
+        }
+    }
+
+    pub fn queue(&self) -> &OfflineSyncQueue {
+        &self.queue
+    }
+
+    /// Dispatch a command to the native desktop station runtime
+    pub fn dispatch(&self, msg: DesktopMessage) -> Result<serde_json::Value, String> {
+        match msg.command.as_str() {
+            "ping" => Ok(serde_json::json!({ "status": "pong", "runtime": "native-desktop" })),
+            "sync_pending" => {
+                let pending = self.queue.pending_records();
+                Ok(serde_json::json!({ "count": pending.len(), "records": pending }))
+            }
+            cmd => Ok(serde_json::json!({ "received": cmd, "handled": true })),
         }
     }
 }

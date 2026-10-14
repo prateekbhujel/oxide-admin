@@ -2504,4 +2504,52 @@ fn test_configurable_port_presets_and_app_spec() {
     assert_eq!(custom_app.spec().port, 9090);
 }
 
+#[test]
+fn test_native_android_kotlin_sdk_generation() {
+    let sdk_gen = SdkGenerator::new("Omni Logistics", "2.1.0")
+        .type_schema("Package", vec![
+            ("id", "string"),
+            ("trackingCode", "string"),
+            ("weightKg", "f64"),
+            ("delivered", "bool"),
+        ])
+        .endpoint("GET", "/api/v1/packages", None, "List<Package>", "List tracked packages")
+        .endpoint("POST", "/api/v1/packages", Some("Package"), "Package", "Register new package");
+
+    let kotlin_code = sdk_gen.to_kotlin();
+    assert!(kotlin_code.contains("package dev.terminus.client"));
+    assert!(kotlin_code.contains("data class Package ("));
+    assert!(kotlin_code.contains("val trackingCode: String"));
+    assert!(kotlin_code.contains("val weightKg: Double"));
+    assert!(kotlin_code.contains("val delivered: Boolean"));
+    assert!(kotlin_code.contains("class OmniLogisticsClient("));
+    assert!(kotlin_code.contains("http://10.0.2.2:3000"));
+    assert!(kotlin_code.contains("suspend fun get_api_v1_packages"));
+    assert!(kotlin_code.contains("suspend fun post_api_v1_packages"));
+    assert!(kotlin_code.contains("Dispatchers.IO"));
+}
+
+#[test]
+fn test_native_desktop_bridge_and_station_ipc() {
+    let bridge = NativeDesktopBridge::new();
+
+    // 1. Dispatch ping command to native desktop station
+    let pong = bridge.dispatch(DesktopMessage::new("ping", serde_json::json!({}))).unwrap();
+    assert_eq!(pong.get("status").unwrap(), "pong");
+    assert_eq!(pong.get("runtime").unwrap(), "native-desktop");
+
+    // 2. Queue offline mutation and inspect via station bridge
+    let id = bridge.queue().enqueue(
+        "create",
+        "/api/orders",
+        serde_json::json!({ "total": 250.00 }),
+        "tx_kiosk_99",
+    );
+    assert!(!id.is_empty());
+
+    let sync_res = bridge.dispatch(DesktopMessage::new("sync_pending", serde_json::json!({}))).unwrap();
+    assert_eq!(sync_res.get("count").unwrap(), 1);
+}
+
+
 

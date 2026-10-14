@@ -1588,6 +1588,7 @@ fn make_sdk(lang: Option<&str>) {
     let code = match language {
         "dart" | "flutter" => sdk_gen.to_dart(),
         "swift" | "ios" => sdk_gen.to_swift(),
+        "kotlin" | "kt" | "android" => sdk_gen.to_kotlin(),
         "openapi" | "swagger" => serde_json::to_string_pretty(&sdk_gen.to_openapi_json()).unwrap_or_default(),
         _ => sdk_gen.to_typescript(),
     };
@@ -1595,6 +1596,7 @@ fn make_sdk(lang: Option<&str>) {
     let filename = match language {
         "dart" | "flutter" => "terminus_client.dart",
         "swift" | "ios" => "TerminusClient.swift",
+        "kotlin" | "kt" | "android" => "TerminusClient.kt",
         "openapi" | "swagger" => "openapi.json",
         _ => "terminus-client.ts",
     };
@@ -1607,19 +1609,27 @@ fn make_sdk(lang: Option<&str>) {
 }
 
 fn make_desktop(name_opt: Option<&str>) {
-    let name = name_opt.unwrap_or("TerminusDesktop");
-    let script = format!(r#"// Terminus Desktop (Tauri/Webview) Scaffolding for {name}
-import {{ invoke }} from '@tauri-apps/api/core';
+    let name = name_opt.unwrap_or("TerminusStation");
+    let script = format!(r#"// Terminus Native Desktop Station IPC Bridge for {name}
+export interface NativeStationMessage {{
+  command: string;
+  payload: Record<string, unknown>;
+}}
 
-export async function executeOfflineAction(action: string, payload: any) {{
-  return await invoke('terminus_offline_sync', {{ action, payload }});
+export async function dispatchStationCommand(command: string, payload: Record<string, unknown> = {{}}) {{
+  const res = await fetch('http://127.0.0.1:3000/api/desktop/ipc', {{
+    method: 'POST',
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{ command, payload }}),
+  }});
+  return await res.json();
 }}
 "#);
     if let Err(e) = std::fs::write("desktop_bridge.ts", script) {
         eprintln!("\x1b[31mError writing desktop bridge:\x1b[0m {e}");
         return;
     }
-    println!("\x1b[32mSuccess:\x1b[0m Scaffolded desktop bridge for \x1b[1m{}\x1b[0m in desktop_bridge.ts", name);
+    println!("\x1b[32mSuccess:\x1b[0m Scaffolded native desktop station bridge for \x1b[1m{}\x1b[0m in desktop_bridge.ts", name);
 }
 
 fn make_iot(device_id_opt: Option<&str>) {

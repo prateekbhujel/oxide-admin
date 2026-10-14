@@ -42,8 +42,8 @@ pub mod prelude {
     pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
     pub use crate::client::{
         BarcodeScanEvent, DesktopMessage, DeviceRecord, DeviceRegistry, DeviceTelemetry,
-        OfflineSyncQueue, OfflineSyncRecord, Platform, PushDispatcher, PushNotification,
-        SdkEndpoint, SdkGenerator,
+        NativeDesktopBridge, OfflineSyncQueue, OfflineSyncRecord, Platform, PushDispatcher,
+        PushNotification, SdkEndpoint, SdkGenerator,
     };
     pub use crate::document::{ExcelDocument, PdfDocument};
     pub use crate::domain::{
