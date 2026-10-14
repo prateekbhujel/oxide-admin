@@ -194,7 +194,7 @@ pub fn render_page(
                     <span id="presence-text">Live Sync</span>
                 </div>
                 <span class="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-700/80 bg-zinc-850 text-zinc-300">{user_role}</span>
-                <span class="text-xs text-zinc-500 font-mono">⌘K</span>
+                <span class="text-xs text-zinc-500 font-mono">Ctrl+K</span>
             </div>
         </header>
 

@@ -211,3 +211,201 @@ impl<T: Debug, E: Debug> Expectation<Result<T, E>> {
         self
     }
 }
+
+use axum::{
+    body::Body,
+    http::{header, HeaderMap, Method, Request, StatusCode},
+};
+
+/// Simulated HTTP Response for headless test execution
+#[derive(Debug, Clone)]
+pub struct TestResponse {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub body: Vec<u8>,
+}
+
+impl TestResponse {
+    /// Return the HTTP status code
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    /// Return the raw numeric status code
+    pub fn status_code(&self) -> u16 {
+        self.status.as_u16()
+    }
+
+    /// Return response body as UTF-8 string
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).to_string()
+    }
+
+    /// Parse response body as JSON Value
+    pub fn json(&self) -> serde_json::Value {
+        serde_json::from_slice(&self.body).unwrap_or(serde_json::Value::Null)
+    }
+
+    /// Deserialize response body into typed struct
+    pub fn try_json<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::from_slice(&self.body)
+    }
+
+    /// Assert exact HTTP status code
+    pub fn assert_status(&self, expected: u16) -> &Self {
+        assert_eq!(
+            self.status.as_u16(),
+            expected,
+            "Expected HTTP status {}, but received {}. Body: {}",
+            expected,
+            self.status.as_u16(),
+            self.text()
+        );
+        self
+    }
+
+    /// Assert HTTP 200 OK
+    pub fn assert_ok(&self) -> &Self {
+        self.assert_status(200)
+    }
+
+    /// Assert HTTP 201 Created
+    pub fn assert_created(&self) -> &Self {
+        self.assert_status(201)
+    }
+
+    /// Assert HTTP 400 Bad Request
+    pub fn assert_bad_request(&self) -> &Self {
+        self.assert_status(400)
+    }
+
+    /// Assert HTTP 401 Unauthorized
+    pub fn assert_unauthorized(&self) -> &Self {
+        self.assert_status(401)
+    }
+
+    /// Assert HTTP 403 Forbidden
+    pub fn assert_forbidden(&self) -> &Self {
+        self.assert_status(403)
+    }
+
+    /// Assert HTTP 404 Not Found
+    pub fn assert_not_found(&self) -> &Self {
+        self.assert_status(404)
+    }
+
+    /// Assert HTTP 422 Unprocessable Entity
+    pub fn assert_unprocessable(&self) -> &Self {
+        self.assert_status(422)
+    }
+
+    /// Assert response body contains substring
+    pub fn assert_contains(&self, substring: &str) -> &Self {
+        let text = self.text();
+        assert!(
+            text.contains(substring),
+            "Expected response body to contain `{}`, but received: `{}`",
+            substring,
+            text
+        );
+        self
+    }
+}
+
+/// Headless in-memory test client for Terminus and Axum applications
+#[derive(Clone)]
+pub struct TestClient {
+    router: axum::Router,
+}
+
+impl TestClient {
+    /// Create a test client wrapping a Terminus App instance
+    pub fn new(app: crate::app::App) -> Self {
+        Self {
+            router: app.build(),
+        }
+    }
+
+    /// Create a test client from an existing Axum Router
+    pub fn from_router(router: axum::Router) -> Self {
+        Self { router }
+    }
+
+    /// Dispatch an arbitrary HTTP request in-memory
+    pub async fn request(&self, req: Request<Body>) -> TestResponse {
+        use tower::ServiceExt;
+        let app = self.router.clone();
+        let res = app
+            .oneshot(req)
+            .await
+            .expect("In-memory request execution failed");
+
+        let status = res.status();
+        let headers = res.headers().clone();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .expect("Failed to read response body bytes");
+
+        TestResponse {
+            status,
+            headers,
+            body: bytes.to_vec(),
+        }
+    }
+
+    /// Dispatch a GET request
+    pub async fn get(&self, uri: &str) -> TestResponse {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(Body::empty())
+            .expect("Failed to build GET request");
+        self.request(req).await
+    }
+
+    /// Dispatch a POST request with JSON payload
+    pub async fn post(&self, uri: &str, body: serde_json::Value) -> TestResponse {
+        let payload = serde_json::to_vec(&body).expect("Failed to serialize json payload");
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(payload))
+            .expect("Failed to build POST request");
+        self.request(req).await
+    }
+
+    /// Dispatch a PUT request with JSON payload
+    pub async fn put(&self, uri: &str, body: serde_json::Value) -> TestResponse {
+        let payload = serde_json::to_vec(&body).expect("Failed to serialize json payload");
+        let req = Request::builder()
+            .method(Method::PUT)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(payload))
+            .expect("Failed to build PUT request");
+        self.request(req).await
+    }
+
+    /// Dispatch a PATCH request with JSON payload
+    pub async fn patch(&self, uri: &str, body: serde_json::Value) -> TestResponse {
+        let payload = serde_json::to_vec(&body).expect("Failed to serialize json payload");
+        let req = Request::builder()
+            .method(Method::PATCH)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(payload))
+            .expect("Failed to build PATCH request");
+        self.request(req).await
+    }
+
+    /// Dispatch a DELETE request
+    pub async fn delete(&self, uri: &str) -> TestResponse {
+        let req = Request::builder()
+            .method(Method::DELETE)
+            .uri(uri)
+            .body(Body::empty())
+            .expect("Failed to build DELETE request");
+        self.request(req).await
+    }
+}

@@ -29,6 +29,7 @@ pub mod view;
 pub mod ws;
 
 pub mod prelude {
+    pub use axum::response::IntoResponse;
     pub use crate::app::{html_response, json_response, redirect_to, App};
     pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
     pub use crate::client::{
@@ -79,7 +80,7 @@ pub mod prelude {
     pub use crate::table::{
         Action, BulkAction, Column, ColumnType, Table, TableAction, TableFilter, TableStyle,
     };
-    pub use crate::testing::{expect, test, test as terminus_test, Expectation};
+    pub use crate::testing::{expect, test, test as terminus_test, Expectation, TestClient, TestResponse};
     pub use crate::theme::{FontFamily, PrimaryColor, ThemeConfig};
     pub use crate::token::{
         BearerToken, HasApiTokens, MemoryTokenStore, NewAccessToken, PersonalAccessToken,

@@ -2128,3 +2128,66 @@ fn test_agent_schema_introspection_and_app_spec() {
     assert!(app.spec().routes.iter().any(|r| r.path == "/api/v1/shipments" && r.method == "POST"));
     assert_eq!(app.spec().models.len(), 1);
 }
+
+#[tokio::test]
+async fn test_headless_test_client_and_http_assertions() {
+    let app = App::new()
+        .name("Test Commerce")
+        .get("/api/health", || async {
+            json_response(serde_json::json!({ "status": "healthy", "service": "commerce" }))
+        })
+        .post("/api/items", |axum::Json(payload): axum::Json<serde_json::Value>| async move {
+            let mut jv = JsonValidator::new(&payload);
+            jv.require_str("name");
+            jv.require_number("price");
+            match jv.validate() {
+                Ok(_) => (
+                    axum::http::StatusCode::CREATED,
+                    [("Content-Type", "application/json")],
+                    serde_json::json!({ "id": "item_123", "status": "created" }).to_string(),
+                )
+                    .into_response(),
+                Err(errors) => errors.into_response(),
+            }
+        })
+        .spec_endpoint("/api/_spec");
+
+    let client = TestClient::new(app);
+
+    // 1. GET /api/health
+    let res = client.get("/api/health").await;
+    res.assert_ok()
+        .assert_contains("healthy");
+    assert_eq!(res.json()["status"], "healthy");
+    assert_eq!(res.json()["service"], "commerce");
+
+    // 2. GET /api/_spec (machine introspection)
+    let spec_res = client.get("/api/_spec").await;
+    spec_res.assert_ok();
+    assert_eq!(spec_res.json()["framework"], "terminus-framework");
+    assert_eq!(spec_res.json()["app_name"], "Test Commerce");
+
+    // 3. POST /api/items (validation failure -> 422)
+    let invalid_res = client
+        .post("/api/items", serde_json::json!({ "name": "" }))
+        .await;
+    invalid_res.assert_unprocessable();
+    assert_eq!(invalid_res.json()["message"], "Validation failed");
+    assert!(invalid_res.json()["errors"]["price"].is_array());
+
+    // 4. POST /api/items (validation success -> 201)
+    let valid_res = client
+        .post(
+            "/api/items",
+            serde_json::json!({ "name": "Laptop", "price": 999.99 }),
+        )
+        .await;
+    valid_res.assert_created();
+    assert_eq!(valid_res.json()["status"], "created");
+    assert_eq!(valid_res.json()["id"], "item_123");
+
+    // 5. GET 404 Not Found
+    let missing_res = client.get("/api/nonexistent").await;
+    missing_res.assert_not_found();
+}
+
