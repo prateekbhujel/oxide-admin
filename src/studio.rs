@@ -73,15 +73,15 @@ impl StudioApp {
         let time_str = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
 
         let db_status = if Path::new(&self.db_path).exists() {
-            format!("\x1b[32m● CONNECTED\x1b[0m ({db_size_kb} KB)")
+            format!("\x1b[32m[CONNECTED]\x1b[0m ({db_size_kb} KB)")
         } else {
-            "\x1b[33m○ IN-MEMORY\x1b[0m".to_string()
+            "\x1b[33m[IN-MEMORY]\x1b[0m".to_string()
         };
 
         format!(
             r#"[1;36m╭────────────────────────────────────────────────────────────────────────────────────────────╮
 │  [1;37mTERMINUS STUDIO [0m [90m— Terminal Telemetry, Database & Cache Inspector[0m                        │
-│  [32m● ONLINE[0m  │  DB: {db_status}  │  PID: [33m{pid}[0m  │  HOST: [35m{os}/{arch}[0m  │  [90m{time_str}[0m │
+│  [32m[ONLINE][0m  │  DB: {db_status}  │  PID: [33m{pid}[0m  │  HOST: [35m{os}/{arch}[0m  │  [90m{time_str}[0m │
 ╰────────────────────────────────────────────────────────────────────────────────────────────╯[0m
 "#
         )
@@ -229,12 +229,12 @@ impl StudioApp {
         out.push_str("  ├─────────────────────────────────┼─────────────────────────────────┤\n");
         if redis_connected {
             out.push_str(&format!(
-                "  │ State: [32m● CONNECTED[0m              │ State: [32m● ACTIVE[0m                 │\n  │ Host:  {:<24} │ Driver: In-Memory TTL LRU       │\n  │ Ping:  [32m{:<24}[0m │ Status: Thread-Safe Mutex       │\n",
+                "  │ State: [32m[CONNECTED][0m              │ State: [32m[ACTIVE][0m                 │\n  │ Host:  {:<24} │ Driver: In-Memory TTL LRU       │\n  │ Ping:  [32m{:<24}[0m │ Status: Thread-Safe Mutex       │\n",
                 self.redis_addr, latency
             ));
         } else {
             out.push_str(&format!(
-                "  │ State: [33m○ OFFLINE (Fallback)[0m     │ State: [32m● ACTIVE (Primary)[0m       │\n  │ Host:  {:<24} │ Driver: In-Memory TTL Hash      │\n  │ Ping:  [90mConnection timed out[0m     │ Status: Zero Dependency         │\n",
+                "  │ State: [33m[OFFLINE] (Fallback)[0m     │ State: [32m[ACTIVE] (Primary)[0m       │\n  │ Host:  {:<24} │ Driver: In-Memory TTL Hash      │\n  │ Ping:  [90mConnection timed out[0m     │ Status: Zero Dependency         │\n",
                 self.redis_addr
             ));
         }
