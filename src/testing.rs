@@ -236,6 +236,11 @@ impl TestResponse {
         self.status.as_u16()
     }
 
+    /// Retrieve an HTTP header value by name
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).and_then(|v| v.to_str().ok())
+    }
+
     /// Return response body as UTF-8 string
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).to_string()

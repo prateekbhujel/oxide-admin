@@ -166,6 +166,12 @@ pub enum DatabaseChoice {
     Sqlite,
     /// PostgreSQL (Enterprise relational database)
     Postgres,
+    /// MySQL / MariaDB (High-throughput transactional database)
+    Mysql,
+    /// MongoDB (Scalable NoSQL document database)
+    Mongo,
+    /// Redis (In-memory key-value and cache store)
+    Redis,
 }
 
 impl DatabaseChoice {
@@ -173,6 +179,9 @@ impl DatabaseChoice {
         match s.to_lowercase().as_str() {
             "sqlite" | "sqlite3" | "sq" => Some(Self::Sqlite),
             "postgres" | "postgresql" | "pg" => Some(Self::Postgres),
+            "mysql" | "mariadb" | "my" => Some(Self::Mysql),
+            "mongodb" | "mongo" | "nosql" => Some(Self::Mongo),
+            "redis" | "keyvalue" => Some(Self::Redis),
             _ => None,
         }
     }
@@ -181,6 +190,9 @@ impl DatabaseChoice {
         match self {
             Self::Sqlite => "sqlite",
             Self::Postgres => "postgres",
+            Self::Mysql => "mysql",
+            Self::Mongo => "mongo",
+            Self::Redis => "redis",
         }
     }
 
@@ -188,6 +200,9 @@ impl DatabaseChoice {
         match self {
             Self::Sqlite => "SQLite (Zero configuration single-file database)",
             Self::Postgres => "PostgreSQL (Enterprise relational database)",
+            Self::Mysql => "MySQL / MariaDB (High throughput transactional database)",
+            Self::Mongo => "MongoDB (Scalable NoSQL document store)",
+            Self::Redis => "Redis (In-memory key-value and cache store)",
         }
     }
 }
@@ -200,6 +215,7 @@ pub struct ProjectConfig {
     pub targets: Vec<TargetPlatform>,
     pub frontend: FrontendChoice,
     pub database: DatabaseChoice,
+    pub port: u16,
 }
 
 impl ProjectConfig {
@@ -215,6 +231,7 @@ impl ProjectConfig {
             ],
             frontend: FrontendChoice::None,
             database: DatabaseChoice::Sqlite,
+            port: 3000,
         }
     }
 
@@ -250,6 +267,11 @@ impl ProjectConfig {
 
     pub fn database(mut self, database: DatabaseChoice) -> Self {
         self.database = database;
+        self
+    }
+
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = port;
         self
     }
 
@@ -369,9 +391,18 @@ chrono = "0.4"
     )
 }
 
-/// Generates src/main.rs tailored to the selected platforms and preset
+/// Generates src/main.rs tailored to the selected platforms, port, and database
 pub fn generate_main_rs(config: &ProjectConfig) -> String {
     let app_name = &config.name;
+    let port_str = config.port.to_string();
+
+    let db_init = match config.database {
+        DatabaseChoice::Sqlite => format!("let db = Database::open(\"{}.db\")?;", app_name),
+        DatabaseChoice::Postgres => format!("let db = Database::connect(&std::env::var(\"DATABASE_URL\").unwrap_or_else(|_| \"postgres://postgres:postgres@localhost:5432/{}\".to_string()))?;", app_name),
+        DatabaseChoice::Mysql => format!("let db = Database::connect(&std::env::var(\"DATABASE_URL\").unwrap_or_else(|_| \"mysql://root:password@localhost:3306/{}\".to_string()))?;", app_name),
+        DatabaseChoice::Mongo => format!("let db = Database::connect(&std::env::var(\"DATABASE_URL\").unwrap_or_else(|_| \"mongodb://localhost:27017/{}\".to_string()))?;", app_name),
+        DatabaseChoice::Redis => "let db = Database::connect(&std::env::var(\"DATABASE_URL\").unwrap_or_else(|_| \"redis://localhost:6379/0\".to_string()))?;".to_string(),
+    };
 
     // 1. IoT-only gateway
     if config.is_iot_only() {
@@ -379,7 +410,7 @@ pub fn generate_main_rs(config: &ProjectConfig) -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::open("{{NAME}}.db")?;
+    {{DB_INIT}}
     db.execute(
         "CREATE TABLE IF NOT EXISTS telemetry_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -401,13 +432,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     println!("Terminus IoT Hardware Scanner Gateway [{{NAME}}] online:");
-    println!("  -> Telemetry Ingest : http://127.0.0.1:3000/api/iot/telemetry");
-    println!("  -> Barcode Scanner  : http://127.0.0.1:3000/api/iot/scan");
+    println!("  -> Telemetry Ingest : http://127.0.0.1:{{PORT}}/api/iot/telemetry");
+    println!("  -> Barcode Scanner  : http://127.0.0.1:{{PORT}}/api/iot/scan");
     println!("  -> Hardware Client  : ./iot/iot_client.py");
-    println!("  -> Terminal Studio  : run `cargo terminus studio` to inspect sensor telemetry");
+    println!("  -> Terminal Studio  : run `terminus studio` to inspect sensor telemetry");
 
     App::new()
-        .port(3000)
+        .port({{PORT}})
         .database(db)
         .get("/", || async {
             json_response(serde_json::json!({
@@ -437,7 +468,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 "#;
-        return tmpl.replace("{{NAME}}", app_name);
+        return tmpl
+            .replace("{{NAME}}", app_name)
+            .replace("{{PORT}}", &port_str)
+            .replace("{{DB_INIT}}", &db_init);
     }
 
     // 2. Desktop-only workstation
@@ -446,7 +480,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::open("{{NAME}}.db")?;
+    {{DB_INIT}}
     db.execute(
         "CREATE TABLE IF NOT EXISTS workstation_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -459,12 +493,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Terminus Desktop Workstation Engine [{{NAME}}] online:");
     println!("  -> Local Database  : {{NAME}}.db");
-    println!("  -> Desktop Sync API: http://127.0.0.1:3000/api/desktop/sync");
+    println!("  -> Desktop Sync API: http://127.0.0.1:{{PORT}}/api/desktop/sync");
     println!("  -> IPC Bridge      : ./desktop/desktop_bridge.ts");
-    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect offline queue");
+    println!("  -> Terminal Studio : run `terminus studio` to inspect offline queue");
 
     App::new()
-        .port(3000)
+        .port({{PORT}})
         .database(db)
         .get("/", || async {
             json_response(serde_json::json!({
@@ -496,7 +530,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 "#;
-        return tmpl.replace("{{NAME}}", app_name);
+        return tmpl
+            .replace("{{NAME}}", app_name)
+            .replace("{{PORT}}", &port_str)
+            .replace("{{DB_INIT}}", &db_init);
     }
 
     // 3. Multi-platform engines (Web + Desktop, Web + Desktop + Mobile, Universal, etc.)
@@ -510,20 +547,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut platform_targets = Vec::new();
 
         if has_web {
-            platform_prints.push("    println!(\"  -> Web Application : http://localhost:3000\");".to_string());
-            platform_prints.push("    println!(\"  -> OpenAPI Specs   : http://localhost:3000/api/openapi.json\");".to_string());
+            platform_prints.push(format!("    println!(\"  -> Web Application : http://localhost:{port_str}\");"));
+            platform_prints.push(format!("    println!(\"  -> OpenAPI Specs   : http://localhost:{port_str}/api/openapi.json\");"));
             platform_targets.push("\"web\"".to_string());
         }
         if has_desktop {
-            platform_prints.push("    println!(\"  -> Desktop Sync API: http://localhost:3000/api/desktop/sync\");".to_string());
+            platform_prints.push(format!("    println!(\"  -> Desktop Sync API: http://localhost:{port_str}/api/desktop/sync\");"));
             platform_targets.push("\"desktop\"".to_string());
         }
         if has_mobile {
-            platform_prints.push("    println!(\"  -> Mobile SDK API  : http://localhost:3000/api/v1\");".to_string());
+            platform_prints.push(format!("    println!(\"  -> Mobile SDK API  : http://localhost:{port_str}/api/v1\");"));
             platform_targets.push("\"mobile\"".to_string());
         }
         if has_iot {
-            platform_prints.push("    println!(\"  -> IoT Scanner API : http://localhost:3000/api/iot/telemetry\");".to_string());
+            platform_prints.push(format!("    println!(\"  -> IoT Scanner API : http://localhost:{port_str}/api/iot/telemetry\");"));
             platform_targets.push("\"iot\"".to_string());
         }
 
@@ -558,7 +595,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Initialize thread-safe database connection
-    let db = Database::open("{{NAME}}.db")?;
+    {{DB_INIT}}
     db.execute(
         "CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -571,17 +608,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Multi-platform SDK & OpenAPI specification generator
     let sdk = SdkGenerator::new("{{NAME}}")
-        .base_url("http://localhost:3000")
+        .base_url("http://localhost:{{PORT}}")
         .endpoint(SdkEndpoint::get("getItems", "/api/v1/items", "Fetch active inventory items"))
         .endpoint(SdkEndpoint::post("createItem", "/api/v1/items", "Create a new inventory item"));
 
     println!("Terminus Unified Platform Engine [{{NAME}}] online across touchpoints:");
 {{PLATFORM_PRINTS}}
-    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect live telemetry");
+    println!("  -> Terminal Studio : run `terminus studio` to inspect live telemetry");
 
     // 3. Bootstrap fluent, zero-boilerplate application engine
     App::new()
-        .port(3000)
+        .port({{PORT}})
         .database(db)
         .openapi("/api/openapi.json", sdk)
         .get("/", || async {
@@ -613,6 +650,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 "#;
         return tmpl
             .replace("{{NAME}}", app_name)
+            .replace("{{PORT}}", &port_str)
+            .replace("{{DB_INIT}}", &db_init)
             .replace("{{PLATFORM_PRINTS}}", &platform_prints.join("\n"))
             .replace("{{PLATFORM_TARGETS}}", &platform_targets.join(", "))
             .replace("{{DESKTOP_GROUP}}\n", if desktop_group.is_empty() { "" } else { desktop_group })
@@ -626,19 +665,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::open("{{NAME}}.db")?;
+    {{DB_INIT}}
 
     let sdk = SdkGenerator::new("{{NAME}}")
-        .base_url("http://localhost:3000")
+        .base_url("http://localhost:{{PORT}}")
         .endpoint(SdkEndpoint::get("getHealth", "/api/v1/health", "Service health check"))
         .endpoint(SdkEndpoint::get("getRecords", "/api/v1/records", "List domain records"));
 
-    println!("Terminus Headless API [{{NAME}}] running on http://localhost:3000");
-    println!("  -> OpenAPI Documentation : http://localhost:3000/api/openapi.json");
-    println!("  -> Terminal Studio       : run `cargo terminus studio` to inspect metrics");
+    println!("Terminus Headless API [{{NAME}}] running on http://localhost:{{PORT}}");
+    println!("  -> OpenAPI Documentation : http://localhost:{{PORT}}/api/openapi.json");
+    println!("  -> Terminal Studio       : run `terminus studio` to inspect metrics");
 
     App::new()
-        .port(3000)
+        .port({{PORT}})
         .database(db)
         .openapi("/api/openapi.json", sdk)
         .group("/api/v1", |api| {
@@ -663,21 +702,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 "#;
             tmpl.replace("{{NAME}}", app_name)
+                .replace("{{PORT}}", &port_str)
+                .replace("{{DB_INIT}}", &db_init)
         }
         _ => {
             let tmpl = r#"use terminus::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::open("{{NAME}}.db")?;
+    {{DB_INIT}}
 
     println!("Terminus Fullstack Application [{{NAME}}] online:");
-    println!("  -> Web Application : http://localhost:3000");
-    println!("  -> API Endpoints   : http://localhost:3000/api/v1");
-    println!("  -> Terminal Studio : run `cargo terminus studio` to inspect metrics");
+    println!("  -> Web Application : http://localhost:{{PORT}}");
+    println!("  -> API Endpoints   : http://localhost:{{PORT}}/api/v1");
+    println!("  -> Terminal Studio : run `terminus studio` to inspect metrics");
 
     App::new()
-        .port(3000)
+        .port({{PORT}})
         .database(db)
         .static_dir("/assets", "public")
         .get("/", || async {
@@ -695,6 +736,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 "#;
             tmpl.replace("{{NAME}}", app_name)
+                .replace("{{PORT}}", &port_str)
+                .replace("{{DB_INIT}}", &db_init)
         }
     }
 }
@@ -705,7 +748,7 @@ pub fn generate_env_example(config: &ProjectConfig) -> String {
         r#"# {name} Environment Configuration
 APP_NAME="{name}"
 APP_ENV=local
-PORT=3000
+PORT={port}
 
 # Database
 DATABASE_URL={db_url}
@@ -714,9 +757,13 @@ DATABASE_URL={db_url}
 APP_KEY=terminus_secret_key_change_in_production
 "#,
         name = config.name,
+        port = config.port,
         db_url = match config.database {
             DatabaseChoice::Sqlite => format!("{}.db", config.name),
-            DatabaseChoice::Postgres => "postgres://postgres:postgres@localhost:5432/terminus_db".to_string(),
+            DatabaseChoice::Postgres => format!("postgres://postgres:postgres@localhost:5432/{}_db", config.name),
+            DatabaseChoice::Mysql => format!("mysql://root:password@localhost:3306/{}_db", config.name),
+            DatabaseChoice::Mongo => format!("mongodb://localhost:27017/{}_db", config.name),
+            DatabaseChoice::Redis => "redis://localhost:6379/0".to_string(),
         }
     )
 }

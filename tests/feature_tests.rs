@@ -2262,3 +2262,246 @@ fn test_transactional_email_html_and_text_rendering() {
     assert!(text.contains("Sent via Terminus Framework"));
 }
 
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct NewsletterSubscriber {
+    email: String,
+    channel: Option<String>,
+}
+
+impl Validate for NewsletterSubscriber {
+    fn validate(&self) -> std::result::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if !self.email.contains('@') || !self.email.contains('.') {
+            errors.add("email", "A valid email address with domain is required");
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_taylor_style_valid_extractor_and_redirect_controller() {
+    // 1. Setup in-memory SQLite schema
+    let db = Database::memory().unwrap();
+    db.with_conn(|conn| {
+        conn.execute(
+            "CREATE TABLE subscribers (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE)",
+            [],
+        ).unwrap();
+    });
+    Database::set_global(db);
+
+    // 2. Define controller handler function matching Taylor Otwell tweet ergonomics
+    async fn subscribe_handler(Valid(subscriber): Valid<NewsletterSubscriber>) -> Result<Redirect> {
+        db::query!("INSERT INTO subscribers (email) VALUES (?)", subscriber.email)
+            .insert()
+            .await?;
+
+        // Idiomatic controller response returning Result<Redirect>
+        Ok(redirect("/subscribe/thank-you"))
+    }
+
+    let app = App::new()
+        .name("Newsletter Portal")
+        .post("/subscribe", subscribe_handler);
+
+    let client = TestClient::new(app);
+
+    // 3. Test valid subscriber submission -> HTTP 303 See Other Redirect to /subscribe/thank-you
+    let res = client
+        .post("/subscribe", serde_json::json!({
+            "email": "taylor@laravel.com",
+            "channel": "rust-preview"
+        }))
+        .await;
+
+    assert_eq!(res.status(), axum::http::StatusCode::SEE_OTHER);
+    assert_eq!(
+        res.header("location"),
+        Some("/subscribe/thank-you")
+    );
+
+    // Verify row was inserted into database via db::query!
+    let row = db::query!("SELECT email FROM subscribers WHERE email = ?", "taylor@laravel.com")
+        .fetch_one()
+        .await
+        .unwrap();
+    assert!(row.is_some());
+    assert_eq!(row.unwrap().get("email").unwrap(), "taylor@laravel.com");
+
+    // 4. Test invalid subscriber submission -> HTTP 422 Unprocessable Entity
+    let bad_res = client
+        .post("/subscribe", serde_json::json!({
+            "email": "invalid-email-address",
+            "channel": "rust-preview"
+        }))
+        .await;
+
+    assert_eq!(bad_res.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    let error_body = bad_res.text();
+    assert!(error_body.contains("Validation failed"));
+    assert!(error_body.contains("A valid email address with domain is required"));
+}
+
+#[tokio::test]
+async fn test_db_query_macro_and_dialect_compilation() {
+    // 1. Dialect parameter conversion for PostgreSQL ($1, $2, ...) vs SQLite (?)
+    let pg_query = SqlQuery::new("SELECT * FROM subscribers WHERE email = ? AND status = ?")
+        .engine(DatabaseEngine::Postgres);
+    assert_eq!(
+        pg_query.compiled_sql(),
+        "SELECT * FROM subscribers WHERE email = $1 AND status = $2"
+    );
+
+    let sqlite_query = SqlQuery::new("SELECT * FROM subscribers WHERE email = ? AND status = ?")
+        .engine(DatabaseEngine::Sqlite);
+    assert_eq!(
+        sqlite_query.compiled_sql(),
+        "SELECT * FROM subscribers WHERE email = ? AND status = ?"
+    );
+
+    // 2. Execution on SQLite database via macro
+    let db = Database::memory().unwrap();
+    db.with_conn(|conn| {
+        conn.execute(
+            "CREATE TABLE products (id TEXT PRIMARY KEY, name TEXT, price REAL)",
+            [],
+        ).unwrap();
+    });
+    Database::set_global(db);
+
+    let inserted_id = db::query!(
+        "INSERT INTO products (id, name, price) VALUES (?, ?, ?)",
+        "p_101",
+        "Ergonomic Keyboard",
+        199.99
+    )
+    .insert()
+    .await
+    .unwrap();
+    assert!(inserted_id > 0);
+
+    let item = db::query!("SELECT id, name, price FROM products WHERE id = ?", "p_101")
+        .fetch_one()
+        .await
+        .unwrap();
+    assert!(item.is_some());
+    let map = item.unwrap();
+    assert_eq!(map.get("name").unwrap(), "Ergonomic Keyboard");
+
+    let count = db::query!("UPDATE products SET price = ? WHERE id = ?", 179.99, "p_101")
+        .execute()
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn test_multi_database_engines_and_url_parsing() {
+    // 1. PostgreSQL
+    let pg = DatabaseConfig::from_url("postgres://postgres:secret@localhost:5432/ecommerce_prod").unwrap();
+    assert_eq!(pg.engine, DatabaseEngine::Postgres);
+    assert_eq!(pg.host, "localhost");
+    assert_eq!(pg.port, 5432);
+    assert_eq!(pg.database, "ecommerce_prod");
+    assert_eq!(pg.username.as_deref(), Some("postgres"));
+    assert_eq!(pg.password.as_deref(), Some("secret"));
+    assert_eq!(pg.to_url(), "postgres://postgres:secret@localhost:5432/ecommerce_prod");
+
+    // 2. MySQL / MariaDB
+    let mysql = DatabaseConfig::from_url("mysql://root:rootpass@127.0.0.1:3306/terminus_app").unwrap();
+    assert_eq!(mysql.engine, DatabaseEngine::Mysql);
+    assert_eq!(mysql.port, 3306);
+    assert_eq!(mysql.database, "terminus_app");
+
+    // 3. MongoDB NoSQL
+    let mongo = DatabaseConfig::from_url("mongodb://cluster0.example.com:27017/analytics").unwrap();
+    assert_eq!(mongo.engine, DatabaseEngine::Mongo);
+    assert_eq!(mongo.host, "cluster0.example.com");
+    assert_eq!(mongo.port, 27017);
+    assert_eq!(mongo.database, "analytics");
+
+    // 4. Redis Key-Value Store
+    let redis = DatabaseConfig::from_url("redis://default:token@cache.internal:6379/0").unwrap();
+    assert_eq!(redis.engine, DatabaseEngine::Redis);
+    assert_eq!(redis.host, "cache.internal");
+    assert_eq!(redis.port, 6379);
+
+    // 5. SQLite file & in-memory
+    let sqlite_file = DatabaseConfig::from_url("sqlite://app.db").unwrap();
+    assert_eq!(sqlite_file.engine, DatabaseEngine::Sqlite);
+    assert_eq!(sqlite_file.database, "app.db");
+
+    let sqlite_mem = DatabaseConfig::from_url(":memory:").unwrap();
+    assert_eq!(sqlite_mem.engine, DatabaseEngine::Sqlite);
+    assert_eq!(sqlite_mem.database, ":memory:");
+}
+
+#[test]
+fn test_mongo_collection_in_memory_crud() {
+    let db = Database::connect("mongodb://localhost:27017/events").unwrap();
+    let col = db.collection("telemetry");
+
+    assert_eq!(col.count_documents(), 0);
+
+    let doc = serde_json::json!({
+        "event": "user_login",
+        "ip": "127.0.0.1",
+        "status": "success"
+    });
+
+    let id = col.insert_one(doc).unwrap();
+    assert!(!id.is_empty());
+    assert_eq!(col.count_documents(), 1);
+
+    let found = col.find_one("event", "user_login").unwrap();
+    assert_eq!(found.get("status").unwrap(), "success");
+
+    let all = col.find_all();
+    assert_eq!(all.len(), 1);
+
+    let deleted = col.delete_one("event", "user_login");
+    assert!(deleted);
+    assert_eq!(col.count_documents(), 0);
+}
+
+#[test]
+fn test_redis_store_in_memory_key_value() {
+    let db = Database::connect("redis://localhost:6379").unwrap();
+    let redis = db.redis();
+
+    // 1. Simple Set & Get
+    redis.set("session:token_abc", "user_42", None);
+    assert_eq!(redis.get("session:token_abc").as_deref(), Some("user_42"));
+    assert!(redis.exists("session:token_abc"));
+
+    // 2. Keys prefix listing
+    redis.set("session:token_xyz", "user_99", None);
+    let keys = redis.keys("session:");
+    assert_eq!(keys.len(), 2);
+
+    // 3. Delete
+    assert!(redis.del("session:token_abc"));
+    assert!(!redis.exists("session:token_abc"));
+    assert_eq!(redis.get("session:token_abc"), None);
+}
+
+#[test]
+fn test_configurable_port_presets_and_app_spec() {
+    let app_3000 = App::port_3000().name("Frontend API");
+    assert_eq!(app_3000.spec().port, 3000);
+
+    let app_8000 = App::port_8000().name("Classic Backend");
+    assert_eq!(app_8000.spec().port, 8000);
+
+    let app_8080 = App::port_8080().name("Microservice Gateway");
+    assert_eq!(app_8080.spec().port, 8080);
+
+    let custom_app = App::new().port(9090);
+    assert_eq!(custom_app.spec().port, 9090);
+}
+
+

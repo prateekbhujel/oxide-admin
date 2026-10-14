@@ -48,8 +48,9 @@ fn main() {
             });
             let frontend_arg = args.iter().find(|a| a.starts_with("--frontend=")).map(|a| a.trim_start_matches("--frontend="));
             let db_arg = args.iter().find(|a| a.starts_with("--db=")).map(|a| a.trim_start_matches("--db="));
+            let port_arg = args.iter().find(|a| a.starts_with("--port=")).map(|a| a.trim_start_matches("--port="));
             let non_interactive = args.iter().any(|a| a == "--yes" || a == "-y" || a == "--non-interactive");
-            run_new_project(name_arg, preset_arg, targets_arg, frontend_arg, db_arg, non_interactive);
+            run_new_project(name_arg, preset_arg, targets_arg, frontend_arg, db_arg, port_arg, non_interactive);
         }
         "make:resource" => {
             let name = args.get(2).map(|s| s.as_str());
@@ -1663,6 +1664,7 @@ fn run_new_project(
     targets_opt: Option<&str>,
     frontend_opt: Option<&str>,
     db_opt: Option<&str>,
+    port_opt: Option<&str>,
     non_interactive: bool,
 ) {
     println!("\x1b[1;36mTerminus Application Scaffolder\x1b[0m\n");
@@ -1769,9 +1771,34 @@ fn run_new_project(
             let options = [
                 ("sqlite", "SQLite (Zero configuration single-file database)"),
                 ("postgres", "PostgreSQL (Enterprise relational database)"),
+                ("mysql", "MySQL / MariaDB (High throughput transactional database)"),
+                ("mongo", "MongoDB (Scalable NoSQL document store)"),
+                ("redis", "Redis (In-memory key-value and cache store)"),
             ];
             let key = prompt::select("Choose database engine:", &options, 0).unwrap_or("sqlite");
             DatabaseChoice::from_str_loose(key).unwrap_or(DatabaseChoice::Sqlite)
+        }
+    };
+
+    let port = if let Some(p) = port_opt.and_then(|p| p.parse::<u16>().ok()) {
+        p
+    } else if non_interactive {
+        std::env::var("PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(3000)
+    } else {
+        let options = [
+            ("3000", "Port 3000 (Standard Web / Fullstack default)"),
+            ("8000", "Port 8000 (Microservices / Backend API)"),
+            ("8080", "Port 8080 (Cloud proxy / Enterprise gateway)"),
+            ("custom", "Custom port number..."),
+        ];
+        let choice = prompt::select("Choose application listening port:", &options, 0).unwrap_or("3000");
+        if choice == "custom" {
+            match prompt::text("Enter custom port number:", Some("3000"), None, false) {
+                Ok(p) => p.parse::<u16>().unwrap_or(3000),
+                _ => 3000,
+            }
+        } else {
+            choice.parse::<u16>().unwrap_or(3000)
         }
     };
 
@@ -1779,7 +1806,8 @@ fn run_new_project(
         .preset(preset)
         .targets(targets)
         .frontend(frontend)
-        .database(database);
+        .database(database)
+        .port(port);
 
     let target_dir = Path::new(&app_name);
     match scaffold_project(target_dir, &config) {
@@ -1791,10 +1819,11 @@ fn run_new_project(
             println!("  • Preset   : {}", config.preset.display_name());
             println!("  • Frontend : {}", config.frontend.display_name());
             println!("  • Database : {}", config.database.display_name());
+            println!("  • Port     : {}", config.port);
             println!("\n\x1b[1mNext steps:\x1b[0m");
             println!("  1. cd {}", app_name);
-            println!("  2. cargo run                     \x1b[90m# Start backend on http://localhost:3000\x1b[0m");
-            println!("  3. cargo terminus studio         \x1b[90m# Launch interactive Terminal UI inspector\x1b[0m");
+            println!("  2. cargo run                     \x1b[90m# Start backend on http://localhost:{}\x1b[0m", config.port);
+            println!("  3. terminus studio               \x1b[90m# Launch interactive Terminal UI inspector\x1b[0m");
             if config.has_target(TargetPlatform::Desktop) {
                 println!("  4. cat desktop/README.md         \x1b[90m# Inspect desktop workstation guide\x1b[0m");
             }

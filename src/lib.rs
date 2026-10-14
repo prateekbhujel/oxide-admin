@@ -28,6 +28,13 @@ pub mod token;
 pub mod view;
 pub mod ws;
 
+pub mod db {
+    pub use crate::orm::{
+        Database, DatabaseConfig, DatabaseEngine, MongoCollection, RedisStore, SqlQuery,
+    };
+    pub use crate::query;
+}
+
 pub mod prelude {
     pub use axum::response::IntoResponse;
     pub use crate::app::{html_response, json_response, redirect_to, App};
@@ -48,17 +55,22 @@ pub mod prelude {
         abort, abort_403, abort_404, abort_if, abort_unless, auth, can, can_all, can_any, cannot,
         config, config_set, env, is_admin, is_superadmin, now, request, set_current_request,
         set_current_user, timestamp, today, user, user_id, with_request, with_user,
-        AbortError, RequestAccessor, RequestInfo,
+        AbortError, RequestAccessor, RequestInfo, Redirect, redirect, Result,
     };
     pub use crate::integrations::{
         OAuthProvider, PasskeyChallenge, PasskeyCredential, WebhookVerifier,
     };
     pub use crate::mail::{MailMessage, Mailer};
     pub use crate::module::{
-        ApiResponse, AppModule, DynamicModule, JsonValidator, ValidatedRequest, ValidationErrors,
-        Validator,
+        ApiResponse, AppModule, DynamicModule, JsonValidator, Valid, Validate, ValidatedRequest,
+        ValidationErrors, Validator,
     };
-    pub use crate::orm::{BelongsTo, Blueprint, Database, DynamicModel, HasMany, Model, ModelQuery, Schema};
+    pub use crate::orm::{
+        BelongsTo, Blueprint, Database, DatabaseConfig, DatabaseEngine, DynamicModel, HasMany,
+        Model, ModelQuery, MongoCollection, RedisStore, Schema, SqlQuery,
+    };
+    pub use crate::query;
+    pub use crate::db;
     pub use crate::panel::AdminPanel;
     pub use crate::prompt;
     pub use crate::query::{OrderDir, Query, WhereClause};

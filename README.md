@@ -24,18 +24,24 @@ Web Admin • REST API • SQLite Persistence • Machine Introspection (`schema
 Terminus provides strong conventions and full-stack solutions to these needs, designed from first principles around what makes sense in Rust.
 
 ---
-
 ## 2-Minute Quickstart
 
 ### Method 1: The Global Installer (`terminus new`)
 
 Install the standalone Terminus CLI globally:
 
+**macOS / Linux / WSL / Alpine:**
 ```bash
-# Instant installer via shell script
 curl -fsSL https://raw.githubusercontent.com/prateekbhujel/terminus/main/install.sh | sh
+```
 
-# Or install via Cargo
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/prateekbhujel/terminus/main/install.ps1 | iex
+```
+
+**Or via Cargo:**
+```bash
 cargo install terminus-framework
 ```
 
@@ -226,6 +232,92 @@ let mut jv = JsonValidator::new(&payload);
 let email = jv.require_email("email");
 let price = jv.require_number("price");
 jv.validate()?;
+```
+
+---
+
+## First-Class Ergonomics: `Valid<T>`, `db::query!`, & Multi-Database Engines
+
+Terminus bridges high-level developer ergonomics with Rust's memory safety and zero-cost abstractions:
+
+### 1. The `Valid<T>` Extractor & `Validate` Trait
+
+Extract, deserialize, and validate request payloads in a single parameter. If validation fails, Terminus immediately halts request execution and returns an HTTP 422 Unprocessable Entity response containing structured JSON errors:
+
+```rust
+use terminus::prelude::*;
+
+#[derive(Deserialize, Serialize)]
+pub struct Subscriber {
+    pub name: String,
+    pub email: String,
+}
+
+impl Validate for Subscriber {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if self.name.trim().is_empty() {
+            errors.add("name", "Name is required");
+        }
+        if !self.email.contains('@') {
+            errors.add("email", "Valid email address required");
+        }
+        if errors.is_empty() { Ok(()) } else { Err(errors) }
+    }
+}
+```
+
+### 2. High-Level Controller Handlers & `db::query!`
+
+Handlers can directly return `Result<Redirect>` or `Result<Json<T>>`. Parameterized queries execute with zero boilerplate:
+
+```rust
+pub async fn store(Valid(subscriber): Valid<Subscriber>) -> Result<Redirect> {
+    db::query!(
+        "INSERT INTO subscribers (name, email) VALUES (?, ?)",
+        subscriber.name,
+        subscriber.email
+    )
+    .insert()
+    .await?;
+
+    Ok(redirect("/subscribers"))
+}
+```
+
+### 3. Multi-Database Engines (Postgres, MySQL, Mongo, Redis, SQLite)
+
+Terminus connects to your database with a single connection URL string and automatically compiles parameter markers to match target engine dialects (`?` for SQLite/MySQL, `$1, $2` for PostgreSQL):
+
+```rust
+// Connect to PostgreSQL, MySQL, MongoDB, Redis, or SQLite
+let db = Database::connect("postgres://postgres:secret@localhost:5432/ecommerce")?;
+// Or SQLite file / in-memory
+let db = Database::connect("sqlite://app.db")?;
+
+// MongoDB NoSQL Document Collections
+let events = db.collection("events");
+events.insert_one(serde_json::json!({ "event": "order_placed", "amount": 149.99 }))?;
+
+// Redis Key-Value & Session Store with TTL
+let redis = db.redis();
+redis.set("session:token_xyz", "user_101", Some(3600)); // 1 hour TTL
+let user = redis.get("session:token_xyz");
+```
+
+### 4. Configurable Port Presets & Cloud Deployments
+
+Select ports interactively during `terminus new`, specify via CLI flags (`--port=8080`), or use presets:
+
+```rust
+// Port presets
+let app = App::port_3000(); // Standard web app (3000)
+let app = App::port_8000(); // Microservices backend (8000)
+let app = App::port_8080(); // Cloud proxy / Gateway (8080)
+let app = App::new().port(9000); // Custom port
+
+// Cloud-native: Automatically detects $PORT injected by Docker, Fly.io, Railway, or Render
+app.run().await
 ```
 
 ---
@@ -490,7 +582,7 @@ Terminus maintains a comprehensive test suite across feature tests, audit loggin
 cargo test
 ```
 
-All 60 unit and integration tests run in under 0.05 seconds with zero external service dependencies.
+All 66 unit and integration tests run in under 1 second with zero external service dependencies.
 
 ---
 

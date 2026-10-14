@@ -325,6 +325,24 @@ impl std::fmt::Display for AbortError {
 
 impl std::error::Error for AbortError {}
 
+impl From<String> for AbortError {
+    fn from(msg: String) -> Self {
+        Self::new(500, msg)
+    }
+}
+
+impl From<&str> for AbortError {
+    fn from(msg: &str) -> Self {
+        Self::new(500, msg)
+    }
+}
+
+impl From<rusqlite::Error> for AbortError {
+    fn from(err: rusqlite::Error) -> Self {
+        Self::new(500, err.to_string())
+    }
+}
+
 impl IntoResponse for AbortError {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status)
@@ -379,7 +397,7 @@ impl IntoResponse for AbortError {
 }
 
 /// Aborts execution with an HTTP status code and message.
-pub fn abort(status_code: u16, message: impl Into<String>) -> Result<(), AbortError> {
+pub fn abort(status_code: u16, message: impl Into<String>) -> Result<()> {
     Err(AbortError {
         status: status_code,
         message: message.into(),
@@ -387,7 +405,7 @@ pub fn abort(status_code: u16, message: impl Into<String>) -> Result<(), AbortEr
 }
 
 /// Aborts execution if the condition is true.
-pub fn abort_if(condition: bool, status_code: u16, message: impl Into<String>) -> Result<(), AbortError> {
+pub fn abort_if(condition: bool, status_code: u16, message: impl Into<String>) -> Result<()> {
     if condition {
         abort(status_code, message)
     } else {
@@ -396,7 +414,7 @@ pub fn abort_if(condition: bool, status_code: u16, message: impl Into<String>) -
 }
 
 /// Aborts execution unless the condition is true.
-pub fn abort_unless(condition: bool, status_code: u16, message: impl Into<String>) -> Result<(), AbortError> {
+pub fn abort_unless(condition: bool, status_code: u16, message: impl Into<String>) -> Result<()> {
     if !condition {
         abort(status_code, message)
     } else {
@@ -405,12 +423,12 @@ pub fn abort_unless(condition: bool, status_code: u16, message: impl Into<String
 }
 
 /// Aborts with HTTP 403 Forbidden.
-pub fn abort_403(message: impl Into<String>) -> Result<(), AbortError> {
+pub fn abort_403(message: impl Into<String>) -> Result<()> {
     abort(403, message)
 }
 
 /// Aborts with HTTP 404 Not Found.
-pub fn abort_404(message: impl Into<String>) -> Result<(), AbortError> {
+pub fn abort_404(message: impl Into<String>) -> Result<()> {
     abort(404, message)
 }
 
@@ -477,3 +495,14 @@ macro_rules! abort_unless {
         }
     };
 }
+
+pub use axum::response::Redirect;
+
+/// Fluent redirect helper returning an HTTP 303/302 Redirect response
+pub fn redirect(to_url: impl AsRef<str>) -> Redirect {
+    Redirect::to(to_url.as_ref())
+}
+
+/// Standard Terminus Result type for controller handlers returning AbortError on failure by default
+pub type Result<T, E = AbortError> = std::result::Result<T, E>;
+

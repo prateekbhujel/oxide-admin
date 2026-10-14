@@ -2,13 +2,82 @@
 //! Encapsulated domain modules containing DTOs, Models, Repositories, Providers, Controllers, Requests, and Routes.
 
 use axum::{
+    body::to_bytes,
+    extract::{FromRequest, Request},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::sync::Arc;
 use crate::resource::Resource;
+
+/// Contract for objects and DTOs that can validate themselves.
+pub trait Validate {
+    fn validate(&self) -> Result<(), ValidationErrors>;
+}
+
+/// Axum Extractor that automatically deserializes and validates a request payload.
+/// If JSON deserialization fails, or if validation fails, it short-circuits and
+/// returns an HTTP 422 Unprocessable Entity response containing structured JSON errors.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Valid<T>(pub T);
+
+impl<T> std::ops::Deref for Valid<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for Valid<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> Valid<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+#[axum::async_trait]
+impl<T, S> FromRequest<S> for Valid<T>
+where
+    T: DeserializeOwned + Validate + 'static,
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+        let bytes = match to_bytes(req.into_body(), 1024 * 1024 * 2).await {
+            Ok(b) => b,
+            Err(e) => {
+                let mut errs = ValidationErrors::new();
+                errs.message = "Failed to read request body".to_string();
+                errs.add("body", e.to_string());
+                return Err(errs.into_response());
+            }
+        };
+
+        let parsed: T = match serde_json::from_slice(&bytes) {
+            Ok(val) => val,
+            Err(e) => {
+                let mut errs = ValidationErrors::new();
+                errs.message = "Invalid JSON payload".to_string();
+                errs.add("payload", e.to_string());
+                return Err(errs.into_response());
+            }
+        };
+
+        if let Err(errors) = parsed.validate() {
+            return Err(errors.into_response());
+        }
+
+        Ok(Valid(parsed))
+    }
+}
 
 /// Core interface for an encapsulated domain module
 pub trait AppModule: Send + Sync {

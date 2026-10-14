@@ -33,13 +33,17 @@ impl Default for App {
 impl App {
     /// Initialize a new Terminus application
     pub fn new() -> Self {
+        let default_port = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(3000);
         let mut spec = crate::spec::AppSpec::new("Terminus Application");
         spec.host = "127.0.0.1".to_string();
-        spec.port = 3000;
+        spec.port = default_port;
         Self {
             name: "Terminus Application".to_string(),
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: default_port,
             router: Router::new(),
             cors_enabled: true,
             spec,
@@ -58,10 +62,31 @@ impl App {
         self
     }
 
-    /// Set the listening port (default 3000)
+    /// Set the listening port (default 3000, or from PORT env variable)
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self.spec.port = port;
+        self
+    }
+
+    /// Preset constructor: Port 3000 (standard web application & admin dashboard)
+    pub fn port_3000() -> Self {
+        Self::new().port(3000)
+    }
+
+    /// Preset constructor: Port 8000 (microservices / alternative backend API)
+    pub fn port_8000() -> Self {
+        Self::new().port(8000)
+    }
+
+    /// Preset constructor: Port 8080 (cloud proxy / enterprise gateway)
+    pub fn port_8080() -> Self {
+        Self::new().port(8080)
+    }
+
+    /// Register the active application database and configure global database access
+    pub fn database(self, db: crate::orm::Database) -> Self {
+        crate::orm::Database::set_global(db);
         self
     }
 
@@ -284,7 +309,11 @@ impl App {
 
     /// Start the server and listen on the configured interface
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        let addr: SocketAddr = format!("{}:{}", self.host, self.port).parse()?;
+        let effective_port = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(self.port);
+        let addr: SocketAddr = format!("{}:{}", self.host, effective_port).parse()?;
         println!("  Terminus Application: {}", self.name);
         println!("  Listening on: http://{}", addr);
 
