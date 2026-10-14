@@ -12,8 +12,8 @@ use axum::{
     Json,
 };
 
-/// Pure-Rust SHA-256 implementation conforming to FIPS 180-4 / RFC 6234
-pub fn sha256_hex(input: &[u8]) -> String {
+/// Pure-Rust SHA-256 implementation conforming to FIPS 180-4 / RFC 6234 returning 32 bytes
+pub fn sha256(input: &[u8]) -> [u8; 32] {
     let mut h = [
         0x6a09e667u32, 0xbb67ae85u32, 0x3c6ef372u32, 0xa54ff53au32,
         0x510e527fu32, 0x9b05688cu32, 0x1f83d9abu32, 0x5be0cd19u32,
@@ -94,11 +94,76 @@ pub fn sha256_hex(input: &[u8]) -> String {
         h[7] = h[7].wrapping_add(h_val);
     }
 
-    let mut out = String::with_capacity(64);
-    for word in h {
-        out.push_str(&format!("{:08x}", word));
+    let mut out = [0u8; 32];
+    for (i, word) in h.iter().enumerate() {
+        out[i * 4..(i + 1) * 4].copy_from_slice(&word.to_be_bytes());
     }
     out
+}
+
+/// Pure-Rust SHA-256 implementation returning a 64-character hex string
+pub fn sha256_hex(input: &[u8]) -> String {
+    let bytes = sha256(input);
+    let mut out = String::with_capacity(64);
+    for b in bytes {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
+}
+
+/// Compute HMAC-SHA256 conforming to RFC 2104 returning raw 32 bytes
+pub fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut k_prime = [0u8; 64];
+    if key.len() > 64 {
+        let key_hash = sha256(key);
+        k_prime[..32].copy_from_slice(&key_hash);
+    } else {
+        k_prime[..key.len()].copy_from_slice(key);
+    }
+
+    let mut k_ipad = [0u8; 64];
+    let mut k_opad = [0u8; 64];
+    for i in 0..64 {
+        k_ipad[i] = k_prime[i] ^ 0x36;
+        k_opad[i] = k_prime[i] ^ 0x5c;
+    }
+
+    let mut inner_input = Vec::with_capacity(64 + message.len());
+    inner_input.extend_from_slice(&k_ipad);
+    inner_input.extend_from_slice(message);
+    let inner_hash = sha256(&inner_input);
+
+    let mut outer_input = Vec::with_capacity(64 + 32);
+    outer_input.extend_from_slice(&k_opad);
+    outer_input.extend_from_slice(&inner_hash);
+    sha256(&outer_input)
+}
+
+/// Compute HMAC-SHA256 returning a 64-character lowercase hex string
+pub fn hmac_sha256_hex(key: &[u8], message: &[u8]) -> String {
+    let bytes = hmac_sha256(key, message);
+    let mut out = String::with_capacity(64);
+    for b in bytes {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
+}
+
+/// Constant-time comparison resistant to timing attacks
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Constant-time string equality check
+pub fn constant_time_eq_str(a: &str, b: &str) -> bool {
+    constant_time_eq(a.as_bytes(), b.as_bytes())
 }
 
 /// A stored Personal Access Token record

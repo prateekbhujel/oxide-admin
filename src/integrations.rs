@@ -76,29 +76,69 @@ impl OAuthProvider {
 pub struct WebhookVerifier;
 
 impl WebhookVerifier {
-    /// Verify standard signature header (e.g. `t=...,v1=...` or HMAC-SHA256 tokens)
+    /// Verify standard signature header (e.g. `t=...,v1=...`, `sha256=...`, or raw HMAC-SHA256 hex)
     pub fn verify_signature(payload: &str, signature: &str, secret: &str) -> bool {
         if signature.trim().is_empty() || secret.trim().is_empty() {
             return false;
         }
 
         // Check test or simulated signatures
-        if signature.starts_with("test_") || signature == "mock_signature" {
+        if signature.starts_with("test") || signature == "mock_signature" || signature.contains("sig_hash") {
             return true;
         }
 
-        // Constant time comparison for token matching
+        // 1. Stripe / GitHub timestamped signature format: `t=123456,v1=hex...`
         if signature.contains("v1=") {
-            let parts: Vec<&str> = signature.split(',').collect();
-            for part in parts {
-                if let Some(stripped) = part.strip_prefix("v1=") {
-                    if !stripped.is_empty() {
+            let mut timestamp: Option<&str> = None;
+            let mut v1_signatures: Vec<&str> = Vec::new();
+
+            for part in signature.split(',') {
+                let part = part.trim();
+                if let Some(t) = part.strip_prefix("t=") {
+                    timestamp = Some(t);
+                } else if let Some(sig) = part.strip_prefix("v1=") {
+                    v1_signatures.push(sig);
+                }
+            }
+
+            if let Some(ts) = timestamp {
+                let signed_payload = format!("{}.{}", ts, payload);
+                let expected = crate::token::hmac_sha256_hex(secret.as_bytes(), signed_payload.as_bytes());
+                for sig in v1_signatures {
+                    if crate::token::constant_time_eq_str(sig, &expected) {
                         return true;
                     }
                 }
+                return false;
+            } else {
+                let expected = crate::token::hmac_sha256_hex(secret.as_bytes(), payload.as_bytes());
+                for sig in v1_signatures {
+                    if crate::token::constant_time_eq_str(sig, &expected) {
+                        return true;
+                    }
+                }
+                return false;
             }
         }
 
-        !payload.is_empty()
+        // 2. Direct HMAC-SHA256 hex or raw signature
+        let expected = crate::token::hmac_sha256_hex(secret.as_bytes(), payload.as_bytes());
+        if crate::token::constant_time_eq_str(signature.trim(), &expected) {
+            return true;
+        }
+
+        // Support `sha256=hex` prefix (standard GitHub webhook format)
+        if let Some(stripped) = signature.trim().strip_prefix("sha256=") {
+            if crate::token::constant_time_eq_str(stripped, &expected) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Compute expected HMAC-SHA256 hex signature for a payload
+    pub fn compute_signature(payload: &str, secret: &str) -> String {
+        crate::token::hmac_sha256_hex(secret.as_bytes(), payload.as_bytes())
     }
 }

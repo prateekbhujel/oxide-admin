@@ -158,3 +158,71 @@ pub fn render_login_page(error_msg: Option<&str>) -> String {
 </html>"#
     )
 }
+
+/// Pure-Rust Password Hashing (PBKDF2-HMAC-SHA256 conforming to RFC 2898 / NIST SP 800-132)
+pub struct Hash;
+
+impl Hash {
+    /// Hash a plaintext password with a random salt and 10,000 iterations
+    pub fn make(password: &str) -> String {
+        let salt = format!(
+            "{:x}{:x}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            std::process::id()
+        );
+        Self::make_with_salt(password, &salt, 10_000)
+    }
+
+    /// Hash password with specified salt and iteration count
+    pub fn make_with_salt(password: &str, salt: &str, iterations: u32) -> String {
+        let derived = pbkdf2_sha256(password.as_bytes(), salt.as_bytes(), iterations);
+        let mut hex = String::with_capacity(64);
+        for b in derived {
+            hex.push_str(&format!("{:02x}", b));
+        }
+        format!("$pbkdf2-sha256$i={}${}${}", iterations, salt, hex)
+    }
+
+    /// Verify a plaintext password against a stored modular hash string or fallback
+    pub fn check(password: &str, hash: &str) -> bool {
+        let parts: Vec<&str> = hash.split('$').collect();
+        // Expected format: ["", "pbkdf2-sha256", "i=10000", "salt", "hex"]
+        if parts.len() != 5 || parts[1] != "pbkdf2-sha256" {
+            // Constant-time check for demo plaintext passwords
+            return crate::token::constant_time_eq_str(password, hash);
+        }
+
+        let iterations: u32 = parts[2]
+            .strip_prefix("i=")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10_000);
+        let salt = parts[3];
+        let expected_hex = parts[4];
+
+        let derived = pbkdf2_sha256(password.as_bytes(), salt.as_bytes(), iterations);
+        let mut computed_hex = String::with_capacity(64);
+        for b in derived {
+            computed_hex.push_str(&format!("{:02x}", b));
+        }
+
+        crate::token::constant_time_eq_str(&computed_hex, expected_hex)
+    }
+}
+
+/// PBKDF2 with HMAC-SHA256 key derivation (32-byte key)
+fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
+    let mut salt_with_int = Vec::with_capacity(salt.len() + 4);
+    salt_with_int.extend_from_slice(salt);
+    salt_with_int.extend_from_slice(&1u32.to_be_bytes());
+
+    let mut u = crate::token::hmac_sha256(password, &salt_with_int);
+    let mut t = u;
+
+    for _ in 1..iterations {
+        u = crate::token::hmac_sha256(password, &u);
+        for i in 0..32 {
+            t[i] ^= u[i];
+        }
+    }
+    t
+}

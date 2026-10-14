@@ -297,6 +297,23 @@ assert!(user.can("orders.view"));     // Allowed: Superadmin default grant
 
 ---
 
+## Password Hashing & Cryptography
+
+Terminus includes pure-Rust cryptographic primitives with zero external C dependencies:
+
+- **PBKDF2-HMAC-SHA256 (`Hash::make` & `Hash::check`)** conforming to RFC 2898 / NIST SP 800-132:
+  ```rust
+  use terminus::prelude::*;
+
+  let hash = Hash::make("secret_password");
+  assert!(Hash::check("secret_password", &hash));
+  assert!(!Hash::check("wrong_password", &hash));
+  ```
+- **Cryptographic Webhook Verification (`WebhookVerifier`)**:
+  Supports Stripe-style timestamped signatures (`t=...,v1=...`), GitHub `sha256=...` signatures, and constant-time comparison to prevent timing attacks.
+
+---
+
 ## Terminal UI Studio (`terminus studio`)
 
 Terminus includes an interactive cross-platform terminal dashboard to inspect database tables, active tokens, and service health directly in your terminal:
@@ -445,7 +462,7 @@ Terminus maintains a comprehensive test suite across feature tests, audit loggin
 cargo test
 ```
 
-All 57 unit and integration tests run in under 0.05 seconds with zero external service dependencies.
+All 60 unit and integration tests run in under 0.05 seconds with zero external service dependencies.
 
 ---
 

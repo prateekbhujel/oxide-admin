@@ -31,6 +31,7 @@ pub mod ws;
 pub mod prelude {
     pub use axum::response::IntoResponse;
     pub use crate::app::{html_response, json_response, redirect_to, App};
+    pub use crate::auth::Hash;
     pub use crate::cache::{CacheDriver, MemoryCache, RedisCache};
     pub use crate::client::{
         BarcodeScanEvent, DesktopMessage, DeviceRecord, DeviceRegistry, DeviceTelemetry,

@@ -41,6 +41,93 @@ impl MailMessage {
     pub fn send_via(&self, mailer: &Mailer) -> Result<(), String> {
         mailer.send(self.clone())
     }
+
+    /// Render email content as responsive HTML
+    pub fn render_html(&self) -> String {
+        let lines_html = self
+            .lines
+            .iter()
+            .map(|l| format!("<p style=\"margin: 0 0 16px; font-size: 15px; line-height: 24px; color: #374151;\">{}</p>", l))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let action_html = if let (Some(text), Some(url)) = (&self.action_text, &self.action_url) {
+            format!(
+                r#"<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+                    <tr>
+                        <td align="center" style="border-radius: 6px; background-color: #111827;">
+                            <a href="{url}" target="_blank" style="display: inline-block; padding: 12px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">{text} &rarr;</a>
+                        </td>
+                    </tr>
+                </table>"#
+            )
+        } else {
+            String::new()
+        };
+
+        format!(
+            r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f4f6; padding: 40px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 28px 32px; border-bottom: 1px solid #f3f4f6; background-color: #fafafa;">
+                            <h1 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">{subject}</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 32px;">
+                            {lines_html}
+                            {action_html}
+                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0 20px;">
+                            <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 20px;">
+                                Sent to <strong>{to}</strong> &bull; {timestamp}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"#,
+            subject = self.subject,
+            lines_html = lines_html,
+            action_html = action_html,
+            to = self.to,
+            timestamp = self.timestamp,
+        )
+    }
+
+    /// Render email content as clean plain text
+    pub fn render_text(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("SUBJECT: {}\n", self.subject));
+        out.push_str(&format!("TO: {}\n", self.to));
+        out.push_str(&format!("DATE: {}\n\n", self.timestamp));
+
+        for line in &self.lines {
+            out.push_str(line);
+            out.push_str("\n\n");
+        }
+
+        if let (Some(text), Some(url)) = (&self.action_text, &self.action_url) {
+            out.push_str(&format!("{}: {}\n\n", text, url));
+        }
+
+        out.push_str("--\nSent via Terminus Framework\n");
+        out
+    }
 }
 
 #[derive(Clone)]

@@ -1,3 +1,4 @@
+use terminus::cache::CacheDriver;
 use terminus::client::SdkGenerator;
 use terminus::prompt;
 use terminus::scaffold::{
@@ -1048,33 +1049,292 @@ CREATE TABLE IF NOT EXISTS items (
 }
 
 fn run_migrations() {
+    let db_path = "terminus.db";
     println!("\x1b[32m[OK] Running Database Migrations...\x1b[0m");
-    println!("Database: terminus.db (SQLite)");
-    println!("  • 20261001_create_users_table ....... [DONE]");
-    println!("  • 20261002_create_orders_table ...... [DONE]");
-    println!("  • 20261003_create_audit_logs_table ... [DONE]");
-    println!("\x1b[32m[OK] All migrations up to date!\x1b[0m");
+    println!("Database: {} (SQLite)", db_path);
+
+    let conn = match rusqlite::Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31m[ERROR] Failed to open database {}: {}\x1b[0m", db_path, e);
+            return;
+        }
+    };
+
+    // 1. Ensure migrations tracking table exists
+    if let Err(e) = conn.execute(
+        r#"CREATE TABLE IF NOT EXISTS _terminus_migrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            migration TEXT NOT NULL UNIQUE,
+            batch INTEGER NOT NULL DEFAULT 1,
+            executed_at TEXT NOT NULL
+        );"#,
+        [],
+    ) {
+        eprintln!("\x1b[31m[ERROR] Failed to initialize _terminus_migrations: {}\x1b[0m", e);
+        return;
+    }
+
+    // 2. Core framework baseline tables
+    let core_migrations = [
+        (
+            "00000000_000001_create_users_table",
+            r#"CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT 'Member',
+                status TEXT NOT NULL DEFAULT 'Active',
+                created_at TEXT NOT NULL
+            );"#,
+        ),
+        (
+            "00000000_000002_create_personal_access_tokens_table",
+            r#"CREATE TABLE IF NOT EXISTS personal_access_tokens (
+                id TEXT PRIMARY KEY,
+                tokenable_type TEXT NOT NULL,
+                tokenable_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                token TEXT NOT NULL,
+                abilities TEXT NOT NULL DEFAULT '["*"]',
+                last_used_at TEXT,
+                expires_at TEXT,
+                created_at TEXT NOT NULL
+            );"#,
+        ),
+        (
+            "00000000_000003_create_audit_logs_table",
+            r#"CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                user_email TEXT,
+                action TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT,
+                ip_address TEXT,
+                user_agent TEXT,
+                payload TEXT,
+                created_at TEXT NOT NULL
+            );"#,
+        ),
+        (
+            "00000000_000004_create_orders_table",
+            r#"CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                total_cents INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'Pending',
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );"#,
+        ),
+    ];
+
+    let mut applied_count = 0;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    for (name, sql) in core_migrations {
+        let already_run: bool = conn
+            .query_row(
+                "SELECT COUNT(1) FROM _terminus_migrations WHERE migration = ?1",
+                rusqlite::params![name],
+                |r| r.get::<_, usize>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+
+        if !already_run {
+            if let Err(e) = conn.execute_batch(sql) {
+                eprintln!("\x1b[31m[ERROR] Failed to run migration {}: {}\x1b[0m", name, e);
+                return;
+            }
+            let _ = conn.execute(
+                "INSERT INTO _terminus_migrations (migration, batch, executed_at) VALUES (?1, 1, ?2)",
+                rusqlite::params![name, now],
+            );
+            println!("  [OK] Applied core migration: {} ... [DONE]", name);
+            applied_count += 1;
+        }
+    }
+
+    // 3. Scan user migrations directory if it exists
+    let migrations_dir = std::path::Path::new("migrations");
+    if migrations_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(migrations_dir) {
+            let mut sql_files = Vec::new();
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("sql") {
+                    sql_files.push(path);
+                }
+            }
+            sql_files.sort();
+
+            for path in sql_files {
+                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+                let already_run: bool = conn
+                    .query_row(
+                        "SELECT COUNT(1) FROM _terminus_migrations WHERE migration = ?1",
+                        rusqlite::params![file_name],
+                        |r| r.get::<_, usize>(0),
+                    )
+                    .map(|c| c > 0)
+                    .unwrap_or(false);
+
+                if !already_run {
+                    if let Ok(sql) = std::fs::read_to_string(&path) {
+                        if let Err(e) = conn.execute_batch(&sql) {
+                            eprintln!("\x1b[31m[ERROR] Failed to execute {}: {}\x1b[0m", file_name, e);
+                            return;
+                        }
+                        let _ = conn.execute(
+                            "INSERT INTO _terminus_migrations (migration, batch, executed_at) VALUES (?1, 1, ?2)",
+                            rusqlite::params![file_name, now],
+                        );
+                        println!("  [OK] Applied custom migration: {} ... [DONE]", file_name);
+                        applied_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if applied_count == 0 {
+        println!("\x1b[32m[OK] Nothing to migrate. All database migrations are up to date.\x1b[0m");
+    } else {
+        println!("\x1b[32m[OK] Successfully applied {} migration(s)!\x1b[0m", applied_count);
+    }
 }
 
 fn run_seed() {
-    println!("\x1b[32m[OK] Seeding Database (terminus.db)...\x1b[0m");
-    println!("  • Seeded 4 default RBAC users (Superadmin, Admin, Editor, Member)");
-    println!("  • Seeded 8 demo orders across Paid, Pending, and Refunded");
-    println!("  • Seeded initial activity audit logs");
+    let db_path = "terminus.db";
+    println!("\x1b[32m[OK] Seeding Database ({})...\x1b[0m", db_path);
+
+    // Ensure database and tables exist
+    run_migrations();
+
+    let conn = match rusqlite::Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31m[ERROR] Failed to open database: {}\x1b[0m", e);
+            return;
+        }
+    };
+
+    let hashed_pw = terminus::auth::Hash::make("admin123");
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let seed_users = [
+        ("Pratik", "pratik@terminus.dev", "Superadmin", "Active"),
+        ("Dharma Raj", "dharma.shrestha@terminus.dev", "Admin", "Active"),
+        ("Elena Rostova", "elena@terminus.dev", "Editor", "Active"),
+        ("Ranjan Gumanju", "ranjan.gumanju@terminus.dev", "Member", "Active"),
+    ];
+
+    let mut user_count = 0;
+    for (name, email, role, status) in seed_users {
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(1) FROM users WHERE email = ?1",
+                rusqlite::params![email],
+                |r| r.get::<_, usize>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+
+        if !exists {
+            let _ = conn.execute(
+                "INSERT INTO users (name, email, password_hash, role, status, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![name, email, hashed_pw, role, status, now],
+            );
+            user_count += 1;
+        }
+    }
+
+    let seed_orders = [
+        ("Acme Logistics", 25000, "Paid", "Annual subscription"),
+        ("Global Corp", 49900, "Paid", "Enterprise cluster"),
+        ("Starlight Studio", 1250, "Pending", "Hardware scanner badge"),
+        ("Nordic Retail", 8750, "Refunded", "Returned handheld terminal"),
+    ];
+
+    let mut order_count = 0;
+    for (customer, total, status, notes) in seed_orders {
+        let _ = conn.execute(
+            "INSERT INTO orders (customer_name, total_cents, status, notes, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![customer, total, status, notes, now],
+        );
+        order_count += 1;
+    }
+
+    println!("  [OK] Seeded {} user account(s) with secure PBKDF2 hashes", user_count);
+    println!("  [OK] Seeded {} commercial order(s)", order_count);
     println!("\x1b[32m[OK] Database seeding completed successfully!\x1b[0m");
 }
 
 fn inspect_tables() {
-    println!("\x1b[32m[OK] Inspecting SQLite Database (terminus.db):\x1b[0m\n");
-    println!("  TABLE        COLUMNS  STATUS");
-    println!("  ──────────────────────────────────────────");
-    println!("  users        5        Active (RBAC Store)");
-    println!("  orders       5        Active (CRUD Store)");
-    println!("  audit_logs   7        Active (Immutable Trail)");
-    println!("  migrations   2        Up to date (3 applied)");
+    let db_path = "terminus.db";
+    println!("\x1b[32m[OK] Inspecting SQLite Database ({}):\x1b[0m\n", db_path);
+
+    if !std::path::Path::new(db_path).exists() {
+        println!("  Database file '{}' does not exist yet.", db_path);
+        println!("  Run 'terminus migrate' to initialize and create database tables.\n");
+        return;
+    }
+
+    let conn = match rusqlite::Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31m[ERROR] Failed to open {}: {}\x1b[0m", db_path, e);
+            return;
+        }
+    };
+
+    let mut stmt = match conn.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("\x1b[31m[ERROR] Failed to query sqlite_master: {}\x1b[0m", e);
+            return;
+        }
+    };
+
+    let tables: Vec<String> = stmt
+        .query_map([], |r| r.get(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default();
+
+    if tables.is_empty() {
+        println!("  Database exists but contains no user tables. Run 'terminus migrate'.");
+        return;
+    }
+
+    println!("  {:<30} {:>10} {:>10}", "TABLE NAME", "COLUMNS", "ROWS");
+    println!("  {}", "─".repeat(54));
+
+    for table in tables {
+        let col_count: usize = conn
+            .prepare(&format!("PRAGMA table_info('{}');", table))
+            .and_then(|mut p| {
+                let rows = p.query_map([], |_| Ok(()))?;
+                Ok(rows.count())
+            })
+            .unwrap_or(0);
+
+        let row_count: usize = conn
+            .query_row(&format!("SELECT COUNT(1) FROM '{}';", table), [], |r| r.get(0))
+            .unwrap_or(0);
+
+        println!("  {:<30} {:>10} {:>10}", table, col_count, row_count);
+    }
+    println!("  {}", "─".repeat(54));
 }
 
 fn clear_cache() {
+    let cache = terminus::cache::MemoryCache::new();
+    cache.flush();
     println!("\x1b[32m[OK] Application Cache cleared successfully!\x1b[0m");
     println!("Flushed: MemoryCache & Redis Key-Value Driver");
 }

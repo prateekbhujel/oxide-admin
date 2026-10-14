@@ -2191,3 +2191,74 @@ async fn test_headless_test_client_and_http_assertions() {
     missing_res.assert_not_found();
 }
 
+#[test]
+fn test_pure_rust_pbkdf2_hash_and_cryptographic_primitives() {
+    let password = "super_secret_master_password_2026";
+    let hash = Hash::make(password);
+
+    assert!(hash.starts_with("$pbkdf2-sha256$i=10000$"));
+    assert!(Hash::check(password, &hash));
+    assert!(!Hash::check("wrong_password", &hash));
+    assert!(!Hash::check("", &hash));
+
+    // Test with specific salt and iterations
+    let custom_hash = Hash::make_with_salt("admin123", "fixed_salt_123", 5_000);
+    assert_eq!(custom_hash, Hash::make_with_salt("admin123", "fixed_salt_123", 5_000));
+    assert!(Hash::check("admin123", &custom_hash));
+    assert!(!Hash::check("admin124", &custom_hash));
+
+    // Test constant-time equality
+    assert!(terminus::token::constant_time_eq_str("hello", "hello"));
+    assert!(!terminus::token::constant_time_eq_str("hello", "world"));
+    assert!(!terminus::token::constant_time_eq_str("hello", "hell"));
+}
+
+#[test]
+fn test_cryptographic_webhook_hmac_sha256_verification() {
+    let payload = r#"{"event":"payment.succeeded","amount":9900}"#;
+    let secret = "whsec_terminus_production_secret_key_8892";
+
+    // 1. Raw HMAC-SHA256 hex
+    let signature = WebhookVerifier::compute_signature(payload, secret);
+    assert!(WebhookVerifier::verify_signature(payload, &signature, secret));
+
+    // 2. GitHub-style prefix `sha256=<hex>`
+    let gh_sig = format!("sha256={}", signature);
+    assert!(WebhookVerifier::verify_signature(payload, &gh_sig, secret));
+
+    // 3. Stripe-style timestamped format `t=...,v1=...`
+    let ts = "1728900000";
+    let signed_payload = format!("{}.{}", ts, payload);
+    let v1_sig = WebhookVerifier::compute_signature(&signed_payload, secret);
+    let stripe_sig = format!("t={},v1={}", ts, v1_sig);
+    assert!(WebhookVerifier::verify_signature(payload, &stripe_sig, secret));
+
+    // 4. Tampered payload or wrong secret must fail
+    assert!(!WebhookVerifier::verify_signature(r#"{"tampered":true}"#, &signature, secret));
+    assert!(!WebhookVerifier::verify_signature(payload, &signature, "wrong_secret"));
+    assert!(!WebhookVerifier::verify_signature(payload, "invalid_sig", secret));
+    assert!(!WebhookVerifier::verify_signature("", &signature, secret));
+}
+
+#[test]
+fn test_transactional_email_html_and_text_rendering() {
+    let msg = MailMessage::to("founder@company.com")
+        .subject("Your Terminus Cluster is Ready")
+        .line("Welcome to Terminus! Your high-performance cluster has been provisioned.")
+        .line("You can now connect to your admin dashboard and manage your application topology.")
+        .action("Access Dashboard", "https://app.terminus.dev/admin");
+
+    let html = msg.render_html();
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("Your Terminus Cluster is Ready"));
+    assert!(html.contains("founder@company.com"));
+    assert!(html.contains("Access Dashboard"));
+    assert!(html.contains("https://app.terminus.dev/admin"));
+
+    let text = msg.render_text();
+    assert!(text.contains("SUBJECT: Your Terminus Cluster is Ready"));
+    assert!(text.contains("TO: founder@company.com"));
+    assert!(text.contains("Access Dashboard: https://app.terminus.dev/admin"));
+    assert!(text.contains("Sent via Terminus Framework"));
+}
+
