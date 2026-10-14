@@ -1906,12 +1906,13 @@ fn print_agent_guide(is_json: bool) {
                 "admin": "Auto-discovering admin panels with typed FormMode::SlideOver and Column builders"
             },
             "cli_commands": {
-                "schema": "cargo run --bin terminus -- schema [--json]",
-                "make_slice": "cargo run --bin terminus -- make:slice <Entity> [--fields='field:type,...']",
-                "make_resource": "cargo run --bin terminus -- make:resource <Entity>",
-                "make_sdk": "cargo run --bin terminus -- make:sdk --lang=ts|swift|dart|openapi",
-                "migrate": "cargo run --bin terminus -- migrate",
-                "studio": "cargo run --bin terminus -- studio"
+                "new": "terminus new [project_name] [--preset=...] [--targets=...]",
+                "schema": "terminus schema [--json]",
+                "make_slice": "terminus make:slice <Entity> [--fields='field:type,...']",
+                "make_resource": "terminus make:resource <Entity>",
+                "make_sdk": "terminus make:sdk --lang=ts|swift|dart|openapi",
+                "migrate": "terminus migrate",
+                "studio": "terminus studio"
             }
         });
         println!("{}", serde_json::to_string_pretty(&guide).unwrap());
@@ -1934,11 +1935,11 @@ In Terminus, every domain feature lives as an encapsulated, self-contained verti
 - migration.sql: typed DDL for SQLite / PostgreSQL.
 
 To scaffold a complete vertical slice in one command:
-  cargo run --bin terminus -- make:slice Order --fields="customer_id:string,total:f64,status:string"
+  terminus make:slice Order --fields="customer_id:string,total:f64,status:string"
 
 ### 2. Deterministic Application Introspection (0 Hallucination)
 To discover models, database tables, routes, and admin resources without scanning dozens of files:
-  cargo run --bin terminus -- schema --json
+  terminus schema --json
 
 ### 3. Type-Safe Compile-Time Request Validation
 Never use stringly-typed rules like "required|email|max:255". Use fluent compile-checked validators:
@@ -1959,10 +1960,10 @@ In src/main.rs:
 
 ### 5. Multi-Target Platform Matrix
 Terminus powers Web, Desktop (Tauri IPC), Mobile (Swift/Flutter), and IoT Hardware Scanners with a single domain engine:
-  cargo run --bin terminus -- make:sdk --lang=ts
-  cargo run --bin terminus -- make:sdk --lang=swift
-  cargo run --bin terminus -- make:sdk --lang=dart
-  cargo run --bin terminus -- make:sdk --lang=openapi
+  terminus make:sdk --lang=ts
+  terminus make:sdk --lang=swift
+  terminus make:sdk --lang=dart
+  terminus make:sdk --lang=openapi
 "#);
     }
 }

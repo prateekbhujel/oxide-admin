@@ -27,9 +27,37 @@ Terminus provides strong conventions and full-stack solutions to these needs, de
 
 ## 2-Minute Quickstart
 
-### Option 1: Run the Working Quickstart Example
+### Method 1: The Global Installer (`terminus new`)
 
-The fastest way to test Terminus is to clone the repository and run the included working quickstart:
+Install the standalone Terminus CLI globally:
+
+```bash
+# Instant installer via shell script
+curl -fsSL https://raw.githubusercontent.com/prateekbhujel/terminus/main/install.sh | sh
+
+# Or install via Cargo
+cargo install terminus-framework
+```
+
+Once installed, scaffold a production-ready application from anywhere:
+
+```bash
+# Interactive project wizard
+terminus new my_app
+
+# Or scaffold non-interactively with specific presets
+terminus new my_app --preset=fullstack
+terminus new my_omni --targets=web,desktop,mobile
+
+cd my_app
+cargo run
+```
+
+Open `http://localhost:3000` in your browser. Browse to `http://localhost:3000/admin` to see the live admin dashboard backed by SQLite.
+
+### Method 2: Run the Working Quickstart Example
+
+Clone the repository and run the working reference quickstart:
 
 ```bash
 git clone https://github.com/prateekbhujel/terminus.git
@@ -37,9 +65,7 @@ cd terminus
 cargo run --example quickstart
 ```
 
-Open `http://localhost:3000` in your browser. Browse to `http://localhost:3000/admin` to see the live admin dashboard backed by SQLite.
-
-### Option 2: Add to Your Own Project
+### Method 3: Add to an Existing Cargo Project
 
 Add Terminus to your `Cargo.toml`:
 
@@ -90,7 +116,7 @@ In a world where developers pair program with autonomous AI coding agents, agent
 Terminus solves this with **deterministic application introspection**:
 
 ```bash
-cargo run --bin terminus -- schema --json
+terminus schema --json
 ```
 
 Outputs a structured, zero-hallucination JSON specification of your entire application:
@@ -123,7 +149,7 @@ Outputs a structured, zero-hallucination JSON specification of your entire appli
 You can also view a clean terminal summary:
 
 ```bash
-cargo run --bin terminus -- schema
+terminus schema
 ```
 
 ---
@@ -135,7 +161,7 @@ In classical MVC frameworks, adding a single entity requires scattering code acr
 Terminus groups features into self-contained vertical domain slices under `src/modules/<slug>/`:
 
 ```bash
-cargo run --bin terminus -- make:slice Order --fields="customer_id:string,total:f64,status:string"
+terminus make:slice Order --fields="customer_id:string,total:f64,status:string"
 ```
 
 Generates:
@@ -319,7 +345,7 @@ Terminus includes pure-Rust cryptographic primitives with zero external C depend
 Terminus includes an interactive cross-platform terminal dashboard to inspect database tables, active tokens, and service health directly in your terminal:
 
 ```bash
-cargo run --bin terminus -- studio
+terminus studio
 ```
 
 ```text
@@ -344,8 +370,10 @@ Shortcuts: [1-5] Switch Tab  [R] Refresh  [T <table_name>] Select Table  [Q] Exi
 
 ## CLI Reference
 
+Terminus commands can be run directly as `terminus <command>` (or as a Cargo plugin `cargo terminus <command>`):
+
 ```bash
-cargo run --bin terminus -- <command> [options]
+terminus <command> [options]
 ```
 
 | Command | Description |

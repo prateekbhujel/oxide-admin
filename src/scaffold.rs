@@ -1105,9 +1105,9 @@ This directory contains native mobile SDK adapters for **{name}**.
 
 Export the latest API contracts anytime:
 ```bash
-cargo run --bin terminus -- make:sdk --lang=swift
-cargo run --bin terminus -- make:sdk --lang=dart
-cargo run --bin terminus -- make:sdk --lang=openapi
+terminus make:sdk --lang=swift
+terminus make:sdk --lang=dart
+terminus make:sdk --lang=openapi
 ```
 "#,
         name = config.name
