@@ -21,6 +21,7 @@ pub struct App {
     pub port: u16,
     pub router: Router,
     pub cors_enabled: bool,
+    pub spec: crate::spec::AppSpec,
 }
 
 impl Default for App {
@@ -32,12 +33,16 @@ impl Default for App {
 impl App {
     /// Initialize a new Terminus application
     pub fn new() -> Self {
+        let mut spec = crate::spec::AppSpec::new("Terminus Application");
+        spec.host = "127.0.0.1".to_string();
+        spec.port = 3000;
         Self {
             name: "Terminus Application".to_string(),
             host: "127.0.0.1".to_string(),
             port: 3000,
             router: Router::new(),
             cors_enabled: true,
+            spec,
         }
     }
 
@@ -49,18 +54,21 @@ impl App {
     /// Set the human-readable application name
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
+        self.spec.app_name = self.name.clone();
         self
     }
 
     /// Set the listening port (default 3000)
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
+        self.spec.port = port;
         self
     }
 
     /// Set the host interface (default 127.0.0.1)
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.host = host.into();
+        self.spec.host = self.host.clone();
         self
     }
 
@@ -76,6 +84,7 @@ impl App {
         H: axum::handler::Handler<T, ()>,
         T: 'static,
     {
+        self.spec.add_route(crate::spec::RouteSpec::new("GET", path, path));
         self.router = self.router.route(path, get(handler));
         self
     }
@@ -86,6 +95,7 @@ impl App {
         H: axum::handler::Handler<T, ()>,
         T: 'static,
     {
+        self.spec.add_route(crate::spec::RouteSpec::new("POST", path, path));
         self.router = self.router.route(path, post(handler));
         self
     }
@@ -96,6 +106,7 @@ impl App {
         H: axum::handler::Handler<T, ()>,
         T: 'static,
     {
+        self.spec.add_route(crate::spec::RouteSpec::new("PUT", path, path));
         self.router = self.router.route(path, put(handler));
         self
     }
@@ -106,6 +117,7 @@ impl App {
         H: axum::handler::Handler<T, ()>,
         T: 'static,
     {
+        self.spec.add_route(crate::spec::RouteSpec::new("PATCH", path, path));
         self.router = self.router.route(path, patch(handler));
         self
     }
@@ -116,6 +128,7 @@ impl App {
         H: axum::handler::Handler<T, ()>,
         T: 'static,
     {
+        self.spec.add_route(crate::spec::RouteSpec::new("DELETE", path, path));
         self.router = self.router.route(path, delete(handler));
         self
     }
@@ -194,6 +207,62 @@ impl App {
         self
     }
 
+    /// Retrieve a reference to the machine-readable application specification
+    pub fn spec(&self) -> &crate::spec::AppSpec {
+        &self.spec
+    }
+
+    /// Retrieve a mutable reference to the machine-readable application specification
+    pub fn spec_mut(&mut self) -> &mut crate::spec::AppSpec {
+        &mut self.spec
+    }
+
+    /// Register a domain model into the application specification
+    pub fn model(mut self, model: crate::spec::ModelSpec) -> Self {
+        self.spec.add_model(model);
+        self
+    }
+
+    /// Register an administrative resource specification
+    pub fn resource_spec(mut self, res: crate::spec::ResourceSpec) -> Self {
+        self.spec.add_resource(res);
+        self
+    }
+
+    /// Mount a modular domain package (AppModule) with routes and admin resources
+    pub fn module<M: crate::module::AppModule + 'static>(mut self, module: M) -> Self {
+        let slug = format!("/{}", module.slug().trim_start_matches('/'));
+        self = self.api(&slug, module.routes());
+        if let Some(res) = module.resource() {
+            self.spec.add_resource(crate::spec::ResourceSpec::new(res.name(), res.slug(), res.slug()));
+        }
+        self
+    }
+
+    /// Expose an agent-native application introspection endpoint serving AppSpec as JSON
+    pub fn spec_endpoint(mut self, path: &str) -> Self {
+        let spec_json = self.spec.to_json_pretty();
+        let clean_path = if path.starts_with('/') {
+            path.to_string()
+        } else {
+            format!("/{}", path)
+        };
+        self.router = self.router.route(
+            &clean_path,
+            get(move || {
+                let body = spec_json.clone();
+                async move {
+                    (
+                        StatusCode::OK,
+                        [("Content-Type", "application/json; charset=utf-8")],
+                        body,
+                    )
+                }
+            }),
+        );
+        self
+    }
+
     /// Enable or disable CORS headers for mobile clients and frontend apps
     pub fn cors(mut self, enabled: bool) -> Self {
         self.cors_enabled = enabled;
@@ -226,7 +295,7 @@ impl App {
     }
 }
 
-/// JSON HTTP response helper for beginner developer experience
+/// JSON HTTP response helper for ergonomic response construction
 pub fn json_response<T: serde::Serialize>(data: T) -> Response {
     match serde_json::to_string(&data) {
         Ok(body) => (

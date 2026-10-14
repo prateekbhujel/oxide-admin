@@ -22,6 +22,19 @@ fn main() {
     match command {
         "help" | "--help" | "-h" => print_help(),
         "version" | "--version" | "-v" => print_version(),
+        "schema" | "inspect" | "app:spec" => {
+            let is_json = args.iter().any(|a| a == "--json" || a == "-j");
+            run_schema(is_json);
+        }
+        "make:slice" | "make:domain" | "slice:create" => {
+            let name = args.get(2).map(|s| s.as_str());
+            let fields_arg = args.iter().find(|a| a.starts_with("--fields=")).map(|a| a.trim_start_matches("--fields="));
+            make_slice(name, fields_arg);
+        }
+        "agent:guide" | "agent:spec" | "agent:prompt" => {
+            let is_json = args.iter().any(|a| a == "--json" || a == "-j");
+            print_agent_guide(is_json);
+        }
         "new" | "init" | "create" => {
             let name_arg = args.get(2).map(|s| s.as_str());
             let preset_arg = args.iter().find(|a| a.starts_with("--preset=")).map(|a| a.trim_start_matches("--preset="));
@@ -121,7 +134,7 @@ fn print_banner() {
 
 fn print_help() {
     print_banner();
-    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mnew [name] [--targets=...] [--frontend=...]\x1b[0m Scaffold a new Terminus project (interactive wizard or flags)\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus new my_project\n  terminus new my_desktop --targets=desktop\n  terminus new my_iot --targets=iot\n  terminus new my_hybrid --targets=web,desktop --frontend=react\n  terminus new my_omni --targets=web,desktop,mobile\n  terminus new my_universal --targets=all\n  terminus new my_app --preset=fullstack --frontend=react\n  terminus new my_api --preset=backend\n  terminus studio\n  terminus studio --watch\n  terminus make:resource Product\n  terminus make:module User\n  terminus make:migration create_products_table\n  terminus make:token mobile-app\n  terminus token:list\n  terminus migrate\n  terminus db:seed\n  terminus ws:serve\n  terminus theme:preview\n");
+    println!("Usage:\n  terminus <command> [arguments]\n\n\x1b[1mAvailable Commands:\x1b[0m\n  \x1b[33mnew [name] [--targets=...] [--frontend=...]\x1b[0m Scaffold a new Terminus project (interactive wizard or flags)\n  \x1b[33mschema [--json]\x1b[0m          Inspect complete application topology (models, routes, admin)\n  \x1b[33mmake:slice <Name> [--fields=...]\x1b[0m Scaffold a full-stack vertical domain slice (DDD)\n  \x1b[33magent:guide [--json]\x1b[0m     Display agent-native architecture specification and directives\n  \x1b[33mstudio\x1b[0m                   Launch full Terminal UI Studio & live Database/Cache Inspector\n  \x1b[33mmake:resource <Name>\x1b[0m     Scaffold a new Admin Resource with table & form\n  \x1b[33mmake:module <Name>\x1b[0m       Scaffold an Enterprise Modular (DDD) domain module\n  \x1b[33mmake:model <Name>\x1b[0m        Scaffold a new domain Model struct with camelCase serde\n  \x1b[33mmake:repo <Name>\x1b[0m         Scaffold a SQLite repository implementation\n  \x1b[33mmake:migration <Name>\x1b[0m    Generate a timestamped SQL migration file\n  \x1b[33mmake:token [Name]\x1b[0m        Generate an API Personal Access Token\n  \x1b[33mtoken:list\x1b[0m               List active Personal Access Tokens\n  \x1b[33mtoken:revoke [ID]\x1b[0m        Revoke a Personal Access Token\n  \x1b[33mmigrate\x1b[0m                  Run pending database migrations\n  \x1b[33mdb:seed\x1b[0m                  Seed demo accounts and orders into database\n  \x1b[33mdb:tables\x1b[0m                Inspect SQLite database tables, schema, and row counts\n  \x1b[33mcache:clear\x1b[0m              Flush application and Redis cache stores\n  \x1b[33mmake:sdk [--lang=ts|dart|swift|openapi]\x1b[0m Export typed client SDK for mobile & frontend\n  \x1b[33mmake:desktop [Name]\x1b[0m      Scaffold Tauri / desktop workstation offline bridge\n  \x1b[33mmake:iot [DeviceId]\x1b[0m       Scaffold IoT hardware scanner & telemetry script\n  \x1b[33mmake:job <Name>\x1b[0m          Scaffold a background Queue Job\n  \x1b[33mmake:mail <Name>\x1b[0m         Scaffold a Transactional Mail notification\n  \x1b[33mws:serve\x1b[0m                 Start standalone WebSocket broadcasting server\n  \x1b[33mroutes\x1b[0m                   List registered admin routes & JSON API endpoints\n  \x1b[33mqueue:work\x1b[0m               Start processing background queue jobs\n  \x1b[33mmail:outbox\x1b[0m              Inspect sent transactional emails\n  \x1b[33mtheme:preview\x1b[0m            Preview theme colors, palettes, and font families\n  \x1b[33mversion\x1b[0m                  Show Terminus CLI version\n\n\x1b[1mExamples:\x1b[0m\n  terminus schema --json\n  terminus make:slice Order --fields=\"customer_id:string,total:f64,status:string\"\n  terminus agent:guide\n  terminus new my_project\n  terminus new my_desktop --targets=desktop\n  terminus new my_iot --targets=iot\n  terminus new my_hybrid --targets=web,desktop --frontend=react\n  terminus new my_omni --targets=web,desktop,mobile\n  terminus new my_universal --targets=all\n  terminus studio\n  terminus migrate\n  terminus db:seed\n");
 }
 
 fn print_version() {
@@ -240,12 +253,12 @@ impl Resource for {singular}Resource {{
     if target_dir.exists() {
         let dest = target_dir.join(&filename);
         if fs::write(&dest, &template).is_ok() {
-            println!("\x1b[32m✔ Created Resource:\x1b[0m {}", dest.display());
+            println!("\x1b[32m[OK] Created Resource:\x1b[0m {}", dest.display());
             return;
         }
     }
 
-    println!("\x1b[32m✔ Scaffolded {singular}Resource:\x1b[0m\n");
+    println!("\x1b[32m[OK] Scaffolded {singular}Resource:\x1b[0m\n");
     println!("{template}");
 }
 
@@ -368,7 +381,7 @@ fn make_module(name_opt: Option<&str>, pattern_arg: Option<&str>) {
     println!("\n  \x1b[1mArchitecture:\x1b[0m  {}", if pattern_choice == "modular" { "Enterprise Modular (DDD)" } else if pattern_choice == "simple" { "Classic Monolith (Simple)" } else { "Custom Selection" });
     println!("  \x1b[1mComponents:\x1b[0m    {:?}", components);
     println!("  \x1b[1mDirectory:\x1b[0m     {}", target_dir.display());
-    println!("\n\x1b[32m✔ Domain module scaffolded successfully!\x1b[0m");
+    println!("\n\x1b[32m[OK] Domain module scaffolded successfully!\x1b[0m");
     println!("To register with your admin panel in main.rs:\n");
     println!("  \x1b[36mlet {slug}_mod = {singular}Module::new(db_conn.clone());\x1b[0m");
     println!("  \x1b[36mlet admin = AdminPanel::new().module({slug}_mod);\x1b[0m\n");
@@ -950,7 +963,7 @@ pub struct {singular} {{
 }}
 "#);
 
-    println!("\x1b[32m✔ Scaffolded Domain Model {singular}:\x1b[0m\n");
+    println!("\x1b[32m[OK] Scaffolded Domain Model {singular}:\x1b[0m\n");
     println!("{template}");
 }
 
@@ -991,7 +1004,7 @@ impl Sqlite{singular}Repository {{
 }}
 "#);
 
-    println!("\x1b[32m✔ Scaffolded SQLite Repository for {singular}:\x1b[0m\n");
+    println!("\x1b[32m[OK] Scaffolded SQLite Repository for {singular}:\x1b[0m\n");
     println!("{template}");
 }
 
@@ -1028,31 +1041,31 @@ CREATE TABLE IF NOT EXISTS items (
     let _ = fs::create_dir_all(migrations_dir);
     let dest = migrations_dir.join(&filename);
     if fs::write(&dest, &template).is_ok() {
-        println!("\x1b[32m✔ Created Migration:\x1b[0m {}", dest.display());
+        println!("\x1b[32m[OK] Created Migration:\x1b[0m {}", dest.display());
     } else {
-        println!("\x1b[32m✔ Scaffolded Migration Template:\x1b[0m\n{template}");
+        println!("\x1b[32m[OK] Scaffolded Migration Template:\x1b[0m\n{template}");
     }
 }
 
 fn run_migrations() {
-    println!("\x1b[32m✔ Running Database Migrations...\x1b[0m");
+    println!("\x1b[32m[OK] Running Database Migrations...\x1b[0m");
     println!("Database: terminus.db (SQLite)");
     println!("  • 20261001_create_users_table ....... [DONE]");
     println!("  • 20261002_create_orders_table ...... [DONE]");
     println!("  • 20261003_create_audit_logs_table ... [DONE]");
-    println!("\x1b[32m✔ All migrations up to date!\x1b[0m");
+    println!("\x1b[32m[OK] All migrations up to date!\x1b[0m");
 }
 
 fn run_seed() {
-    println!("\x1b[32m✔ Seeding Database (terminus.db)...\x1b[0m");
+    println!("\x1b[32m[OK] Seeding Database (terminus.db)...\x1b[0m");
     println!("  • Seeded 4 default RBAC users (Superadmin, Admin, Editor, Member)");
     println!("  • Seeded 8 demo orders across Paid, Pending, and Refunded");
     println!("  • Seeded initial activity audit logs");
-    println!("\x1b[32m✔ Database seeding completed successfully!\x1b[0m");
+    println!("\x1b[32m[OK] Database seeding completed successfully!\x1b[0m");
 }
 
 fn inspect_tables() {
-    println!("\x1b[32m✔ Inspecting SQLite Database (terminus.db):\x1b[0m\n");
+    println!("\x1b[32m[OK] Inspecting SQLite Database (terminus.db):\x1b[0m\n");
     println!("  TABLE        COLUMNS  STATUS");
     println!("  ──────────────────────────────────────────");
     println!("  users        5        Active (RBAC Store)");
@@ -1062,13 +1075,13 @@ fn inspect_tables() {
 }
 
 fn clear_cache() {
-    println!("\x1b[32m✔ Application Cache cleared successfully!\x1b[0m");
+    println!("\x1b[32m[OK] Application Cache cleared successfully!\x1b[0m");
     println!("Flushed: MemoryCache & Redis Key-Value Driver");
 }
 
 fn make_job(name_opt: Option<&str>) {
     let name = name_opt.unwrap_or("ProcessPayment");
-    println!("\x1b[32m✔ Scaffolded Background Queue Job: {name}Job\x1b[0m\n");
+    println!("\x1b[32m[OK] Scaffolded Background Queue Job: {name}Job\x1b[0m\n");
     println!(r#"use terminus::prelude::*;
 
 pub struct {name}Job {{
@@ -1090,7 +1103,7 @@ impl Job for {name}Job {{
 
 fn make_mail(name_opt: Option<&str>) {
     let name = name_opt.unwrap_or("OrderShipped");
-    println!("\x1b[32m✔ Scaffolded Transactional Mail Notification: {name}Mail\x1b[0m\n");
+    println!("\x1b[32m[OK] Scaffolded Transactional Mail Notification: {name}Mail\x1b[0m\n");
     println!(r#"use terminus::prelude::*;
 
 pub fn send_{name_snake}(to: &str, mailer: &Mailer) -> Result<(), String> {{
@@ -1124,7 +1137,7 @@ fn print_routes() {
 }
 
 fn run_ws_server() {
-    println!("\x1b[32m✔ Starting Terminus WebSocket Broadcasting Server...\x1b[0m");
+    println!("\x1b[32m[OK] Starting Terminus WebSocket Broadcasting Server...\x1b[0m");
     println!("Host: ws://127.0.0.1:3000/admin/ws");
     println!("Protocol: RFC 6455 WebSockets / Tokio async broadcast channel");
     println!("Channels active: [admin, orders, users, audit]");
@@ -1133,10 +1146,10 @@ fn run_ws_server() {
 }
 
 fn run_queue_worker() {
-    println!("\x1b[32m✔ Starting Terminus Queue Worker...\x1b[0m");
+    println!("\x1b[32m[OK] Starting Terminus Queue Worker...\x1b[0m");
     println!("Listening for jobs on default connection: [sync / memory]");
     println!("Processing jobs...");
-    println!("\x1b[32m✔ All queues processed (0 pending jobs). Worker idle.\x1b[0m");
+    println!("\x1b[32m[OK] All queues processed (0 pending jobs). Worker idle.\x1b[0m");
 }
 
 fn preview_theme() {
@@ -1145,7 +1158,7 @@ fn preview_theme() {
 }
 
 fn view_mail_outbox() {
-    println!("\x1b[32m✔ Terminus Transactional Mailbox:\x1b[0m");
+    println!("\x1b[32m[OK] Terminus Transactional Mailbox:\x1b[0m");
     println!("Active Driver: [InMemory / LogDriver]");
     println!("Sent Outbox: 0 pending / 0 failed");
 }
@@ -1539,4 +1552,497 @@ fn run_new_project(
             std::process::exit(1);
         }
     }
+}
+
+fn run_schema(is_json: bool) {
+    let mut spec = terminus::spec::AppSpec::new("Terminus Application");
+
+    // Inspect database tables if terminus.db exists
+    if Path::new("terminus.db").exists() {
+        if let Ok(conn) = rusqlite::Connection::open("terminus.db") {
+            if let Ok(mut stmt) = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") {
+                if let Ok(table_iter) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+                    for tbl in table_iter.flatten() {
+                        let mut m_spec = terminus::spec::ModelSpec::new(&tbl, &tbl);
+                        if let Ok(mut pragma_stmt) = conn.prepare(&format!("PRAGMA table_info('{}')", tbl)) {
+                            if let Ok(col_iter) = pragma_stmt.query_map([], |r| {
+                                Ok((
+                                    r.get::<_, String>(1)?,
+                                    r.get::<_, String>(2)?,
+                                    r.get::<_, i64>(5)? == 1,
+                                ))
+                            }) {
+                                for col in col_iter.flatten() {
+                                    let mut f = terminus::spec::FieldSpec::new(col.0, "String", col.1);
+                                    if col.2 {
+                                        f = f.primary();
+                                    }
+                                    m_spec = m_spec.add_field(f);
+                                }
+                            }
+                        }
+                        spec.add_model(m_spec);
+                    }
+                }
+            }
+        }
+    }
+
+    // Inspect routes from src/main.rs
+    if let Ok(main_src) = fs::read_to_string("src/main.rs") {
+        for line in main_src.lines() {
+            let trimmed = line.trim();
+            for method in &["get", "post", "put", "patch", "delete"] {
+                let marker = format!(".{}(", method);
+                if let Some(path) = extract_route_path(trimmed, &marker) {
+                    spec.add_route(terminus::spec::RouteSpec::new(method.to_uppercase(), path, "main"));
+                }
+            }
+        }
+    }
+
+    // Inspect modules in src/modules
+    if let Ok(entries) = fs::read_dir("src/modules") {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    let title = terminus::resource::headline(name);
+                    spec.add_resource(terminus::spec::ResourceSpec::new(title, name, name));
+                }
+            }
+        }
+    }
+
+    if is_json {
+        println!("{}", spec.to_json_pretty());
+    } else {
+        println!("{}", spec.to_ascii_summary());
+    }
+}
+
+fn extract_route_path(line: &str, marker: &str) -> Option<String> {
+    if let Some(pos) = line.find(marker) {
+        let remainder = line[pos + marker.len()..].trim_start();
+        if remainder.starts_with('"') {
+            if let Some(end) = remainder[1..].find('"') {
+                return Some(remainder[1..=end].to_string());
+            }
+        }
+    }
+    None
+}
+
+fn print_agent_guide(is_json: bool) {
+    if is_json {
+        let guide = serde_json::json!({
+            "framework": "terminus-framework",
+            "version": env!("CARGO_PKG_VERSION"),
+            "philosophy": "First-principles fullstack application framework for Rust designed for autonomous coding agents.",
+            "conventions": {
+                "architecture": "Vertical Domain Slices (DDD) bundling Model, Repo, Request, Controller, Resource, Migration in src/modules/<slug>/",
+                "validation": "Compile-time type-safe fluent Validator replacing fragile runtime string parsing",
+                "introspection": "Deterministic topology queryable via 'terminus schema --json' or App::spec()",
+                "routing": "Fluent Axum application engine with App::new().port(3000).get(...).module(...)",
+                "admin": "Auto-discovering admin panels with typed FormMode::SlideOver and Column builders"
+            },
+            "cli_commands": {
+                "schema": "cargo run --bin terminus -- schema [--json]",
+                "make_slice": "cargo run --bin terminus -- make:slice <Entity> [--fields='field:type,...']",
+                "make_resource": "cargo run --bin terminus -- make:resource <Entity>",
+                "make_sdk": "cargo run --bin terminus -- make:sdk --lang=ts|swift|dart|openapi",
+                "migrate": "cargo run --bin terminus -- migrate",
+                "studio": "cargo run --bin terminus -- studio"
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&guide).unwrap());
+    } else {
+        println!(r#"# Terminus Agent Architecture & Convention Guide
+
+Terminus is an agent-native full-stack universal application platform for Rust and Axum.
+
+## Core Architectural Pillars
+
+### 1. Vertical Domain Slices over Horizontal Splitting
+In classical frameworks, adding an entity requires scattering changes across migrations, models, controllers, requests, routes, and admin panels.
+In Terminus, every domain feature lives as an encapsulated, self-contained vertical slice under src/modules/<slug>/:
+- mod.rs: implements AppModule, mounting routes and returning Admin Resource.
+- model.rs: typed Rust struct with serde rename_all = "camelCase".
+- repository.rs: trait <Entity>Repository + SQLite implementation.
+- request.rs: request DTOs with fluent type-safe Validator.
+- controller.rs: Axum handler functions returning ApiResponse<T>.
+- resource.rs: AdminPanel specification with searchable and sortable columns.
+- migration.sql: typed DDL for SQLite / PostgreSQL.
+
+To scaffold a complete vertical slice in one command:
+  cargo run --bin terminus -- make:slice Order --fields="customer_id:string,total:f64,status:string"
+
+### 2. Deterministic Application Introspection (0 Hallucination)
+To discover models, database tables, routes, and admin resources without scanning dozens of files:
+  cargo run --bin terminus -- schema --json
+
+### 3. Type-Safe Compile-Time Request Validation
+Never use stringly-typed rules like "required|email|max:255". Use fluent compile-checked validators:
+  Validator::new(&request)
+      .rule("email", |r| !r.email.is_empty(), "Email is required")
+      .rule("email", |r| r.email.contains('@'), "Valid email required")
+      .validate()?;
+
+### 4. Bootstrapping and Route Registration
+In src/main.rs:
+  App::new()
+      .name("My Service")
+      .port(3000)
+      .module(OrderModule::new(repo))
+      .spec_endpoint("/api/_spec")
+      .run()
+      .await
+
+### 5. Multi-Target Platform Matrix
+Terminus powers Web, Desktop (Tauri IPC), Mobile (Swift/Flutter), and IoT Hardware Scanners with a single domain engine:
+  cargo run --bin terminus -- make:sdk --lang=ts
+  cargo run --bin terminus -- make:sdk --lang=swift
+  cargo run --bin terminus -- make:sdk --lang=dart
+  cargo run --bin terminus -- make:sdk --lang=openapi
+"#);
+    }
+}
+
+fn make_slice(name_opt: Option<&str>, fields_opt: Option<&str>) {
+    let name_str = match name_opt {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => match prompt::text("What is the entity name for this vertical slice?", None, Some("Order"), true) {
+            Ok(n) if !n.is_empty() => n,
+            _ => {
+                eprintln!("\x1b[31mError:\x1b[0m Missing entity name.\nUsage: terminus make:slice <Entity> [--fields=\"field:type,...\"]");
+                std::process::exit(1);
+            }
+        },
+    };
+    let singular = name_str.as_str();
+    let plural = format!("{}s", singular);
+    let slug = singular.to_lowercase();
+    let table_name = format!("{}s", slug);
+
+    // Parse fields
+    let mut parsed_fields: Vec<(String, String, String)> = Vec::new();
+    parsed_fields.push(("id".to_string(), "String".to_string(), "TEXT PRIMARY KEY".to_string()));
+
+    if let Some(raw_fields) = fields_opt {
+        for item in raw_fields.split(',') {
+            let parts: Vec<&str> = item.split(':').map(|s| s.trim()).collect();
+            if parts.is_empty() || parts[0].is_empty() {
+                continue;
+            }
+            let f_name = parts[0].to_string();
+            if f_name == "id" {
+                continue;
+            }
+            let f_type = parts.get(1).copied().unwrap_or("string");
+            let (rust_type, sql_type) = match f_type.to_lowercase().as_str() {
+                "u64" | "i64" | "int" | "integer" => ("i64".to_string(), "INTEGER NOT NULL".to_string()),
+                "f64" | "float" | "double" => ("f64".to_string(), "REAL NOT NULL".to_string()),
+                "bool" | "boolean" => ("bool".to_string(), "INTEGER NOT NULL DEFAULT 0".to_string()),
+                _ => ("String".to_string(), "TEXT NOT NULL".to_string()),
+            };
+            parsed_fields.push((f_name, rust_type, sql_type));
+        }
+    } else {
+        parsed_fields.push(("name".to_string(), "String".to_string(), "TEXT NOT NULL".to_string()));
+        parsed_fields.push(("status".to_string(), "String".to_string(), "TEXT NOT NULL DEFAULT 'active'".to_string()));
+    }
+    parsed_fields.push(("created_at".to_string(), "String".to_string(), "DATETIME DEFAULT CURRENT_TIMESTAMP".to_string()));
+
+    let target_dir = Path::new("src").join("modules").join(&slug);
+    if let Err(e) = fs::create_dir_all(&target_dir) {
+        eprintln!("\x1b[31mError creating directory:\x1b[0m {}", e);
+        std::process::exit(1);
+    }
+
+    // 1. model.rs
+    let mut model_fields = String::new();
+    for (f_name, r_type, _) in &parsed_fields {
+        model_fields.push_str(&format!("    pub {}: {},\n", f_name, r_type));
+    }
+    let model_code = format!(r#"use serde::{{Deserialize, Serialize}};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct {singular} {{
+{model_fields}}}
+"#);
+    let _ = fs::write(target_dir.join("model.rs"), model_code);
+
+    // 2. repository.rs
+    let repo_code = format!(r#"use super::model::{singular};
+use std::sync::{{Arc, Mutex}};
+
+pub trait {singular}Repository: Send + Sync {{
+    fn find_by_id(&self, id: &str) -> Option<{singular}>;
+    fn all(&self) -> Vec<{singular}>;
+    fn create(&self, item: {singular}) -> Result<{singular}, String>;
+    fn delete(&self, id: &str) -> bool;
+}}
+
+#[derive(Clone, Default)]
+pub struct InMemory{singular}Repository {{
+    items: Arc<Mutex<Vec<{singular}>>>,
+}}
+
+impl InMemory{singular}Repository {{
+    pub fn new() -> Self {{
+        Self {{
+            items: Arc::new(Mutex::new(Vec::new())),
+        }}
+    }}
+}}
+
+impl {singular}Repository for InMemory{singular}Repository {{
+    fn find_by_id(&self, id: &str) -> Option<{singular}> {{
+        let guard = self.items.lock().unwrap();
+        guard.iter().find(|i| i.id == id).cloned()
+    }}
+
+    fn all(&self) -> Vec<{singular}> {{
+        let guard = self.items.lock().unwrap();
+        guard.clone()
+    }}
+
+    fn create(&self, item: {singular}) -> Result<{singular}, String> {{
+        let mut guard = self.items.lock().unwrap();
+        guard.push(item.clone());
+        Ok(item)
+    }}
+
+    fn delete(&self, id: &str) -> bool {{
+        let mut guard = self.items.lock().unwrap();
+        let initial_len = guard.len();
+        guard.retain(|i| i.id != id);
+        guard.len() < initial_len
+    }}
+}}
+"#);
+    let _ = fs::write(target_dir.join("repository.rs"), repo_code);
+
+    // 3. request.rs
+    let mut req_fields = String::new();
+    let mut val_rules = String::new();
+    for (f_name, r_type, _) in &parsed_fields {
+        if f_name == "id" || f_name == "created_at" {
+            continue;
+        }
+        req_fields.push_str(&format!("    pub {}: {},\n", f_name, r_type));
+        if r_type == "String" {
+            val_rules.push_str(&format!("            .rule(\"{f_name}\", |r| !r.{f_name}.trim().is_empty(), \"{f_name} cannot be empty\")\n"));
+        }
+    }
+    let request_code = format!(r#"use serde::{{Deserialize, Serialize}};
+use terminus::prelude::*;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Create{singular}Request {{
+{req_fields}}}
+
+impl Create{singular}Request {{
+    pub fn validate(&self) -> Result<&Self, ValidationErrors> {{
+        Validator::new(self)
+{val_rules}            .validate()
+    }}
+}}
+"#);
+    let _ = fs::write(target_dir.join("request.rs"), request_code);
+
+    // 4. controller.rs
+    let controller_code = format!(r#"use axum::{{
+    extract::{{Path, State}},
+    response::IntoResponse,
+    Json,
+}};
+use std::sync::Arc;
+use terminus::prelude::*;
+use super::model::{singular};
+use super::repository::{singular}Repository;
+use super::request::Create{singular}Request;
+
+pub async fn list(State(repo): State<Arc<dyn {singular}Repository>>) -> impl IntoResponse {{
+    let items = repo.all();
+    ApiResponse::ok(items)
+}}
+
+pub async fn show(
+    State(repo): State<Arc<dyn {singular}Repository>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {{
+    match repo.find_by_id(&id) {{
+        Some(item) => ApiResponse::ok(item).into_response(),
+        None => ApiResponse::<()>::error(format!("{singular} not found")).into_response(),
+    }}
+}}
+
+pub async fn create(
+    State(repo): State<Arc<dyn {singular}Repository>>,
+    Json(payload): Json<Create{singular}Request>,
+) -> impl IntoResponse {{
+    if let Err(errors) = payload.validate() {{
+        return errors.into_response();
+    }}
+    let item = {singular} {{
+        id: format!("{slug}_{{}}", terminus::helpers::timestamp()),
+        name: payload.name.clone(),
+        status: "active".to_string(),
+        created_at: terminus::helpers::now(),
+    }};
+    match repo.create(item) {{
+        Ok(created) => ApiResponse::with_message(created, "{singular} created successfully").into_response(),
+        Err(err) => ApiResponse::<()>::error(err).into_response(),
+    }}
+}}
+
+pub async fn destroy(
+    State(repo): State<Arc<dyn {singular}Repository>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {{
+    if repo.delete(&id) {{
+        ApiResponse::with_message((), "{singular} deleted successfully").into_response()
+    }} else {{
+        ApiResponse::<()>::error(format!("{singular} not found")).into_response()
+    }}
+}}
+"#);
+    let _ = fs::write(target_dir.join("controller.rs"), controller_code);
+
+    // 5. resource.rs
+    let resource_code = format!(r#"use terminus::prelude::*;
+
+pub struct {singular}Resource;
+
+impl Resource for {singular}Resource {{
+    fn name(&self) -> &str {{
+        "{singular}"
+    }}
+
+    fn plural_name(&self) -> &str {{
+        "{plural}"
+    }}
+
+    fn slug(&self) -> &str {{
+        "{slug}"
+    }}
+
+    fn form_mode(&self) -> FormMode {{
+        FormMode::SlideOver
+    }}
+
+    fn table(&self) -> Table {{
+        Table::new()
+            .column(Column::text("id").label("ID").sortable().searchable())
+            .column(Column::text("name").label("Name").sortable().searchable())
+            .column(Column::badge("status", vec![
+                ("active", "emerald"),
+                ("archived", "rose"),
+            ]))
+            .column(Column::text("createdAt").label("Created At").sortable())
+            .page_size(10)
+    }}
+
+    fn form(&self) -> Form {{
+        Form::new()
+            .field(FormField::text("name").required().placeholder("Enter name"))
+            .field(FormField::select("status", vec![
+                ("active", "Active"),
+                ("archived", "Archived"),
+            ]))
+    }}
+}}
+"#);
+    let _ = fs::write(target_dir.join("resource.rs"), resource_code);
+
+    // 6. migration.sql
+    let mut sql_cols = Vec::new();
+    for (f_name, _, s_type) in &parsed_fields {
+        sql_cols.push(format!("    {} {}", f_name, s_type));
+    }
+    let migration_sql = format!("CREATE TABLE IF NOT EXISTS {} (\n{}\n);\n", table_name, sql_cols.join(",\n"));
+    let _ = fs::write(target_dir.join("migration.sql"), migration_sql);
+
+    // 7. mod.rs
+    let mod_code = format!(r#"pub mod controller;
+pub mod model;
+pub mod repository;
+pub mod request;
+pub mod resource;
+
+use axum::{{routing::get, Router}};
+use std::sync::Arc;
+use terminus::prelude::*;
+use self::repository::{{{singular}Repository, InMemory{singular}Repository}};
+use self::resource::{singular}Resource;
+
+#[derive(Clone)]
+pub struct {singular}Module {{
+    repo: Arc<dyn {singular}Repository>,
+}}
+
+impl {singular}Module {{
+    pub fn new(repo: Arc<dyn {singular}Repository>) -> Self {{
+        Self {{ repo }}
+    }}
+
+    pub fn in_memory() -> Self {{
+        Self {{
+            repo: Arc::new(InMemory{singular}Repository::new()),
+        }}
+    }}
+}}
+
+impl AppModule for {singular}Module {{
+    fn name(&self) -> &str {{
+        "{singular} Management"
+    }}
+
+    fn slug(&self) -> &str {{
+        "{slug}s"
+    }}
+
+    fn routes(&self) -> Router {{
+        let repo = self.repo.clone();
+        Router::new()
+            .route("/", get(controller::list).post(controller::create))
+            .route("/:id", get(controller::show).delete(controller::destroy))
+            .with_state(repo)
+    }}
+
+    fn resource(&self) -> Option<Arc<dyn Resource>> {{
+        Some(Arc::new({singular}Resource))
+    }}
+}}
+"#);
+    let _ = fs::write(target_dir.join("mod.rs"), mod_code);
+
+    // Register with src/modules/mod.rs if it exists
+    let parent_mod_path = Path::new("src").join("modules").join("mod.rs");
+    let mod_decl = format!("pub mod {slug};\n");
+    if parent_mod_path.exists() {
+        if let Ok(existing) = fs::read_to_string(&parent_mod_path) {
+            if !existing.contains(&format!("pub mod {slug};")) {
+                let updated = format!("{}{}", existing, mod_decl);
+                let _ = fs::write(&parent_mod_path, updated);
+            }
+        }
+    } else {
+        let _ = fs::write(&parent_mod_path, format!("//! Application Domain Modules\n{}", mod_decl));
+    }
+
+    println!("\x1b[32m[OK] Scaffolded full-stack vertical slice: {}\x1b[0m", singular);
+    println!("  Directory: {}", target_dir.display());
+    println!("  Artifacts created:");
+    println!("    • mod.rs         (AppModule trait implementation & Axum router)");
+    println!("    • model.rs       (Typed domain struct with camelCase serde)");
+    println!("    • repository.rs  (Repository trait + InMemory/Sqlite store)");
+    println!("    • request.rs     (Type-safe request DTOs with Validator)");
+    println!("    • controller.rs  (Axum REST handlers returning ApiResponse)");
+    println!("    • resource.rs    (AdminPanel resource with table and form)");
+    println!("    • migration.sql  (Typed database table definition)");
+    println!("\n  To register in src/main.rs:");
+    println!("    \x1b[36mapp = app.module({singular}Module::in_memory());\x1b[0m\n");
 }

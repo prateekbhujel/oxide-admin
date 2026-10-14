@@ -19,6 +19,7 @@ pub mod queue;
 pub mod repository;
 pub mod resource;
 pub mod scaffold;
+pub mod spec;
 pub mod studio;
 pub mod table;
 pub mod testing;
@@ -51,7 +52,10 @@ pub mod prelude {
         OAuthProvider, PasskeyChallenge, PasskeyCredential, WebhookVerifier,
     };
     pub use crate::mail::{MailMessage, Mailer};
-    pub use crate::module::{ApiResponse, AppModule, DynamicModule, ValidatedRequest};
+    pub use crate::module::{
+        ApiResponse, AppModule, DynamicModule, JsonValidator, ValidatedRequest, ValidationErrors,
+        Validator,
+    };
     pub use crate::orm::{BelongsTo, Blueprint, Database, DynamicModel, HasMany, Model, ModelQuery, Schema};
     pub use crate::panel::AdminPanel;
     pub use crate::prompt;
@@ -70,6 +74,7 @@ pub mod prelude {
         parse_targets, scaffold_project, DatabaseChoice, FrontendChoice, ProjectConfig,
         ProjectPreset, TargetPlatform,
     };
+    pub use crate::spec::{AppSpec, FieldSpec, ModelSpec, ResourceSpec, RouteSpec, ServiceSpec};
     pub use crate::studio::StudioApp;
     pub use crate::table::{
         Action, BulkAction, Column, ColumnType, Table, TableAction, TableFilter, TableStyle,

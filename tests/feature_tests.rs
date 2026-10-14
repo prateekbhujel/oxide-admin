@@ -1983,3 +1983,148 @@ fn test_composable_platform_matrix_scaffolding() {
     // Clean up
     let _ = std::fs::remove_dir_all(&temp_base);
 }
+
+#[test]
+fn test_type_safe_validator_and_validation_errors() {
+    use terminus::prelude::*;
+
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+    struct OrderRequest {
+        customer_email: String,
+        amount: f64,
+        shipping_country: Option<String>,
+        is_rush: bool,
+    }
+
+    // 1. Successful validation
+    let valid_req = OrderRequest {
+        customer_email: "orders@company.com".to_string(),
+        amount: 250.0,
+        shipping_country: Some("US".to_string()),
+        is_rush: false,
+    };
+
+    let result = Validator::new(&valid_req)
+        .rule("customer_email", |r| !r.customer_email.is_empty(), "Email is required")
+        .rule("customer_email", |r| r.customer_email.contains('@'), "Valid email required")
+        .rule("amount", |r| r.amount > 0.0, "Amount must be greater than zero")
+        .rule_when(|r| r.is_rush, "amount", |r| r.amount >= 50.0, "Rush orders require min $50")
+        .validate();
+
+    assert!(result.is_ok());
+
+    // 2. Failed validation with multiple rules
+    let invalid_req = OrderRequest {
+        customer_email: "invalid-email".to_string(),
+        amount: -10.0,
+        shipping_country: None,
+        is_rush: true,
+    };
+
+    let err_result = Validator::new(&invalid_req)
+        .rule("customer_email", |r| !r.customer_email.is_empty(), "Email is required")
+        .rule("customer_email", |r| r.customer_email.contains('@'), "Valid email required")
+        .rule("amount", |r| r.amount > 0.0, "Amount must be greater than zero")
+        .rule_when(|r| r.is_rush, "amount", |r| r.amount >= 50.0, "Rush orders require min $50")
+        .validate();
+
+    assert!(err_result.is_err());
+    let errors = err_result.err().unwrap();
+    assert_eq!(errors.message, "Validation failed");
+    assert!(errors.has_errors_for("customer_email"));
+    assert_eq!(errors.first("customer_email"), Some("Valid email required"));
+    assert!(errors.has_errors_for("amount"));
+    assert_eq!(errors.errors.get("amount").unwrap().len(), 2); // negative and rush condition
+
+    // 3. JsonValidator on untyped payloads
+    let raw_json = serde_json::json!({
+        "name": "Widget A",
+        "email": "test@domain.com",
+        "price": 19.99
+    });
+
+    let mut jv = JsonValidator::new(&raw_json);
+    let name = jv.require_str("name");
+    let email = jv.require_email("email");
+    let price = jv.require_number("price");
+    assert_eq!(name, Some("Widget A"));
+    assert_eq!(email, Some("test@domain.com"));
+    assert_eq!(price, Some(19.99));
+    assert!(jv.validate().is_ok());
+
+    let invalid_json = serde_json::json!({
+        "name": "",
+        "email": "not-an-email",
+        "price": "not-a-number"
+    });
+
+    let mut bad_jv = JsonValidator::new(&invalid_json);
+    bad_jv.require_str("name");
+    bad_jv.require_email("email");
+    bad_jv.require_number("price");
+    let bad_res = bad_jv.validate();
+    assert!(bad_res.is_err());
+    let j_errors = bad_res.err().unwrap();
+    assert!(j_errors.has_errors_for("name"));
+    assert!(j_errors.has_errors_for("email"));
+    assert!(j_errors.has_errors_for("price"));
+}
+
+#[test]
+fn test_agent_schema_introspection_and_app_spec() {
+    use terminus::prelude::*;
+
+    // 1. Direct AppSpec construction
+    let mut spec = AppSpec::new("Warehouse Master");
+    spec.set_targets(vec!["web".to_string(), "desktop".to_string(), "iot".to_string()]);
+
+    spec.add_route(RouteSpec::new("GET", "/api/items", "list_items").with_auth(true));
+    spec.add_route(RouteSpec::new("POST", "/api/items", "create_item"));
+
+    let item_model = ModelSpec::new("Item", "items")
+        .add_field(FieldSpec::new("id", "String", "TEXT").primary())
+        .add_field(FieldSpec::new("sku", "String", "TEXT"))
+        .add_field(FieldSpec::new("quantity", "i64", "INTEGER"))
+        .add_field(FieldSpec::new("notes", "String", "TEXT").nullable());
+    spec.add_model(item_model);
+
+    let res = ResourceSpec::new("Item", "items", "items")
+        .with_searchable(&["sku", "name"])
+        .with_sortable(&["quantity", "created_at"]);
+    spec.add_resource(res);
+
+    assert_eq!(spec.app_name, "Warehouse Master");
+    assert_eq!(spec.targets.len(), 3);
+    assert_eq!(spec.routes.len(), 2);
+    assert_eq!(spec.models.len(), 1);
+    assert_eq!(spec.models[0].fields.len(), 4);
+    assert_eq!(spec.resources.len(), 1);
+
+    // Serialization for AI agents
+    let json = spec.to_json_pretty();
+    assert!(json.contains("\"framework\": \"terminus-framework\""));
+    assert!(json.contains("\"app_name\": \"Warehouse Master\""));
+    assert!(json.contains("\"sku\""));
+
+    let ascii_table = spec.to_ascii_summary();
+    assert!(ascii_table.contains("TERMINUS APPLICATION TOPOLOGY"));
+    assert!(ascii_table.contains("[ROUTES]"));
+    assert!(ascii_table.contains("/api/items"));
+    assert!(ascii_table.contains("[MODELS & TABLES]"));
+    assert!(ascii_table.contains("[ADMIN RESOURCES]"));
+
+    // 2. Integration with App engine
+    let app = App::new()
+        .name("Logistics API")
+        .port(4000)
+        .get("/api/v1/health", || async { "OK" })
+        .post("/api/v1/shipments", || async { "Created" })
+        .model(ModelSpec::new("Shipment", "shipments"))
+        .spec_endpoint("/spec");
+
+    assert_eq!(app.spec().app_name, "Logistics API");
+    assert_eq!(app.spec().port, 4000);
+    assert!(app.spec().routes.iter().any(|r| r.path == "/api/v1/health" && r.method == "GET"));
+    assert!(app.spec().routes.iter().any(|r| r.path == "/api/v1/shipments" && r.method == "POST"));
+    assert_eq!(app.spec().models.len(), 1);
+}

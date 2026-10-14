@@ -162,3 +162,164 @@ impl AppModule for DynamicModule {
         self.resource.clone()
     }
 }
+
+/// Structured validation errors keyed by field name
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ValidationErrors {
+    pub message: String,
+    pub errors: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl ValidationErrors {
+    pub fn new() -> Self {
+        Self {
+            message: "Validation failed".to_string(),
+            errors: std::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    pub fn add(&mut self, field: impl Into<String>, message: impl Into<String>) {
+        self.errors.entry(field.into()).or_default().push(message.into());
+    }
+
+    pub fn has_errors_for(&self, field: &str) -> bool {
+        self.errors.contains_key(field)
+    }
+
+    pub fn first(&self, field: &str) -> Option<&str> {
+        self.errors.get(field).and_then(|v| v.first().map(|s| s.as_str()))
+    }
+
+    pub fn all_messages(&self) -> Vec<String> {
+        self.errors.values().flatten().cloned().collect()
+    }
+}
+
+impl IntoResponse for ValidationErrors {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            [("Content-Type", "application/json; charset=utf-8")],
+            serde_json::to_string(&self).unwrap_or_else(|_| "{}".to_string()),
+        )
+            .into_response()
+    }
+}
+
+/// Fluent type-safe validator for domain request objects
+pub struct Validator<'a, T> {
+    target: &'a T,
+    errors: ValidationErrors,
+}
+
+impl<'a, T> Validator<'a, T> {
+    pub fn new(target: &'a T) -> Self {
+        Self {
+            target,
+            errors: ValidationErrors::new(),
+        }
+    }
+
+    /// Add a validation rule evaluated via closure
+    pub fn rule<F>(mut self, field: &str, predicate: F, message: &str) -> Self
+    where
+        F: FnOnce(&T) -> bool,
+    {
+        if !predicate(self.target) {
+            self.errors.add(field, message);
+        }
+        self
+    }
+
+    /// Add a conditional validation rule
+    pub fn rule_when<F, C>(mut self, condition: C, field: &str, predicate: F, message: &str) -> Self
+    where
+        C: FnOnce(&T) -> bool,
+        F: FnOnce(&T) -> bool,
+    {
+        if condition(self.target) && !predicate(self.target) {
+            self.errors.add(field, message);
+        }
+        self
+    }
+
+    /// Direct error addition
+    pub fn add_error(mut self, field: &str, message: &str) -> Self {
+        self.errors.add(field, message);
+        self
+    }
+
+    /// Finalize validation, returning Ok(&T) or Err(ValidationErrors)
+    pub fn validate(self) -> Result<&'a T, ValidationErrors> {
+        if self.errors.is_empty() {
+            Ok(self.target)
+        } else {
+            Err(self.errors)
+        }
+    }
+}
+
+/// Fluent validator for untyped or semi-structured JSON payloads
+pub struct JsonValidator<'a> {
+    data: &'a serde_json::Value,
+    errors: ValidationErrors,
+}
+
+impl<'a> JsonValidator<'a> {
+    pub fn new(data: &'a serde_json::Value) -> Self {
+        Self {
+            data,
+            errors: ValidationErrors::new(),
+        }
+    }
+
+    pub fn require_str(&mut self, field: &str) -> Option<&'a str> {
+        match self.data.get(field).and_then(|v| v.as_str()) {
+            Some(s) if !s.trim().is_empty() => Some(s),
+            _ => {
+                self.errors.add(field, format!("{field} is required"));
+                None
+            }
+        }
+    }
+
+    pub fn require_email(&mut self, field: &str) -> Option<&'a str> {
+        let val = self.require_str(field)?;
+        if !val.contains('@') || !val.contains('.') {
+            self.errors.add(field, format!("{field} must be a valid email address"));
+            return None;
+        }
+        Some(val)
+    }
+
+    pub fn require_min_len(&mut self, field: &str, min: usize) -> Option<&'a str> {
+        let val = self.require_str(field)?;
+        if val.len() < min {
+            self.errors.add(field, format!("{field} must be at least {min} characters"));
+            return None;
+        }
+        Some(val)
+    }
+
+    pub fn require_number(&mut self, field: &str) -> Option<f64> {
+        match self.data.get(field).and_then(|v| v.as_f64()) {
+            Some(n) => Some(n),
+            _ => {
+                self.errors.add(field, format!("{field} must be a valid number"));
+                None
+            }
+        }
+    }
+
+    pub fn validate(self) -> Result<&'a serde_json::Value, ValidationErrors> {
+        if self.errors.is_empty() {
+            Ok(self.data)
+        } else {
+            Err(self.errors)
+        }
+    }
+}

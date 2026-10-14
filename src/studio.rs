@@ -125,7 +125,7 @@ impl StudioApp {
         let mut out = String::new();
 
         // 1. KPI Metric Cards
-        out.push_str("[1;37m📊 SYSTEM TELEMETRY & SERVICE HEALTH:[0m\n\n");
+        out.push_str("[1;37m[TELEMETRY] SYSTEM TELEMETRY & SERVICE HEALTH:[0m\n\n");
         out.push_str("  ┌──────────────────────┬──────────────────────┬──────────────────────┐\n");
         out.push_str(&format!(
             "  │ [36mDATABASE (SQLite)[0m    │ [35mCACHE & KEY-VALUE[0m    │ [32mQUEUE & JOBS[0m         │\n  │ [1m{table_count} Tables / {row_count} Rows[0m │ │ [1mMemoryCache + Redis[0m  │ │ [1m{queue_pending} Pending Jobs[0m      │\n  │ [90mPath: {}[0m   │ │ [90m{}[0m │ │ [90mWorker: Idle / Ready[0m │\n",
@@ -139,7 +139,7 @@ impl StudioApp {
         out.push_str("  └──────────────────────┴──────────────────────┴──────────────────────┘\n\n");
 
         // 2. Database Tables Summary
-        out.push_str("[1;37m🗄️ REGISTERED DATABASE TABLES:[0m\n");
+        out.push_str("[1;37m[DATABASE] REGISTERED DATABASE TABLES:[0m\n");
         out.push_str("  ┌──────────────────────┬─────────────┬─────────────┬───────────────────────────┐\n");
         out.push_str("  │ TABLE NAME           │ COLUMNS     │ ROWS        │ STATUS                    │\n");
         out.push_str("  ├──────────────────────┼─────────────┼─────────────┼───────────────────────────┤\n");
@@ -167,7 +167,7 @@ impl StudioApp {
         let (tables, columns, rows, total_rows) = self.fetch_table_data(&self.selected_table, self.page, self.page_size);
 
         out.push_str(&format!(
-            "[1;37m🗄️ DATABASE EXPLORER ── Active Table: [36m{}[0m [90m({total_rows} total rows, Page {}/{})[0m\n\n",
+            "[1;37m[DATABASE] DATABASE EXPLORER ── Active Table: [36m{}[0m [90m({total_rows} total rows, Page {}/{})[0m\n\n",
             self.selected_table,
             self.page,
             ((total_rows.saturating_sub(1)) / self.page_size) + 1
@@ -185,7 +185,7 @@ impl StudioApp {
         out.push_str("\n\n");
 
         if columns.is_empty() {
-            out.push_str(&format!("  [33m⚠️ Table '{}' does not exist or has no columns.[0m\n", self.selected_table));
+            out.push_str(&format!("  [33m[WARN] Table '{}' does not exist or has no columns.[0m\n", self.selected_table));
         } else {
             // Render table header
             let col_width = 16;
@@ -240,7 +240,7 @@ impl StudioApp {
         }
         out.push_str("  └─────────────────────────────────┴─────────────────────────────────┘\n\n");
 
-        out.push_str("[1;37m📦 SAMPLE CACHE KEYS & HIT-RATES:[0m\n");
+        out.push_str("[1;37m[CACHE] SAMPLE CACHE KEYS & HIT-RATES:[0m\n");
         out.push_str("  ┌──────────────────────────────┬────────────┬─────────────┬─────────────┐\n");
         out.push_str("  │ KEY                          │ TTL (SEC)  │ SIZE        │ STATUS      │\n");
         out.push_str("  ├──────────────────────────────┼────────────┼─────────────┼─────────────┤\n");
@@ -257,7 +257,7 @@ impl StudioApp {
     /// Tab 4: Background Queue & Job Monitor
     pub fn render_queue(&self) -> String {
         let mut out = String::new();
-        out.push_str("[1;37m📬 BACKGROUND JOB QUEUE & WORKER TELEMETRY:[0m\n\n");
+        out.push_str("[1;37m[QUEUE] BACKGROUND JOB QUEUE & WORKER TELEMETRY:[0m\n\n");
 
         out.push_str("  ┌──────────────────────┬──────────────────────┬──────────────────────┐\n");
         out.push_str("  │ [32mPENDING JOBS[0m         │ [36mPROCESSED TODAY[0m      │ [31mFAILED JOBS[0m          │\n");
@@ -265,7 +265,7 @@ impl StudioApp {
         out.push_str("  │ [90mWorker: Idle / Ready[0m │ [90mAvg Latency: 1.2ms[0m   │ [90mRetry attempts: 3[0m    │\n");
         out.push_str("  └──────────────────────┴──────────────────────┴──────────────────────┘\n\n");
 
-        out.push_str("[1;37m⚙️ RECENT QUEUE JOBS:[0m\n");
+        out.push_str("[1;37m[JOBS] RECENT QUEUE JOBS:[0m\n");
         out.push_str("  ┌──────────┬─────────────────────────────┬───────────┬─────────────┬─────────────┐\n");
         out.push_str("  │ ID       │ JOB NAME                    │ ATTEMPTS  │ STATUS      │ TIMESTAMP   │\n");
         out.push_str("  ├──────────┼─────────────────────────────┼───────────┼─────────────┼─────────────┤\n");
@@ -285,7 +285,7 @@ impl StudioApp {
         let tokens = self.fetch_tokens();
 
         out.push_str(&format!(
-            "[1;37m🔑 PERSONAL ACCESS TOKENS ── ({} Active Tokens):[0m\n\n",
+            "[1;37m[TOKENS] PERSONAL ACCESS TOKENS ── ({} Active Tokens):[0m\n\n",
             tokens.len()
         ));
 
@@ -316,7 +316,7 @@ impl StudioApp {
     /// Tab 6: Transactional Mail Outbox
     pub fn render_mail(&self) -> String {
         let mut out = String::new();
-        out.push_str("[1;37m✉️ TRANSACTIONAL MAIL OUTBOX:[0m\n\n");
+        out.push_str("[1;37m[MAIL] TRANSACTIONAL MAIL OUTBOX:[0m\n\n");
 
         out.push_str("  ┌─────┬──────────────────────────────┬──────────────────────────────┬─────────────┐\n");
         out.push_str("  │ ID  │ RECIPIENT TO                 │ SUBJECT                      │ STATUS      │\n");
@@ -336,7 +336,7 @@ impl StudioApp {
         let logs = self.fetch_audit_logs();
 
         out.push_str(&format!(
-            "[1;37m🛡️ SECURITY AUDIT TRAIL LOGS ── ({} Recent Events):[0m\n\n",
+            "[1;37m[AUDIT] SECURITY AUDIT TRAIL LOGS ── ({} Recent Events):[0m\n\n",
             logs.len()
         ));
 
@@ -396,7 +396,7 @@ impl StudioApp {
 
             let cmd = input.trim();
             if cmd.eq_ignore_ascii_case("q") || cmd.eq_ignore_ascii_case("exit") {
-                println!("\n\x1b[32m✔ Exited Terminus Studio.\x1b[0m");
+                println!("\n\x1b[32m[OK] Exited Terminus Studio.\x1b[0m");
                 break;
             }
 
@@ -412,11 +412,11 @@ impl StudioApp {
                 "n" | "N" => self.page = self.page.saturating_add(1),
                 "p" | "P" => self.page = self.page.saturating_sub(1).max(1),
                 "c" | "C" => {
-                    println!("\x1b[32m✔ Flushed application cache stores.\x1b[0m");
+                    println!("\x1b[32m[OK] Flushed application cache stores.\x1b[0m");
                     std::thread::sleep(Duration::from_millis(600));
                 }
                 "w" | "W" => {
-                    println!("\x1b[32m✔ Processed pending queue jobs.\x1b[0m");
+                    println!("\x1b[32m[OK] Processed pending queue jobs.\x1b[0m");
                     std::thread::sleep(Duration::from_millis(600));
                 }
                 tbl if tbl.starts_with("t ") || tbl.starts_with("T ") => {

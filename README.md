@@ -229,6 +229,68 @@ impl Resource for ProductResource {
 
 ---
 
+## Agent-Native Architecture & Deterministic Introspection
+
+Terminus is engineered from first principles around what makes sense in Rust, and in a world where AI agents build applications and humans no longer write boilerplate code by hand.
+
+### 1. Deterministic Machine Introspection (`terminus schema --json`)
+AI agents query complete application topology in one deterministic command with zero hallucination:
+
+```bash
+cargo terminus schema --json
+```
+
+Returns models, database tables, route endpoints, administrative resources, and client SDK bindings:
+
+```json
+{
+  "framework": "terminus-framework",
+  "version": "0.1.0",
+  "app_name": "Warehouse Master",
+  "routes": [
+    { "method": "GET", "path": "/api/items", "handler": "list_items", "auth": true }
+  ],
+  "models": [
+    { "name": "Item", "table": "items", "fields": [ ... ] }
+  ],
+  "resources": [
+    { "name": "Item", "slug": "items", "searchable": ["sku", "name"] }
+  ]
+}
+```
+
+### 2. Full-Stack Vertical Domain Slices (`terminus make:slice`)
+In classical frameworks, adding an entity requires editing 6+ scattered files. In Terminus, every domain feature is a self-contained, compile-checked vertical slice:
+
+```bash
+cargo terminus make:slice Order --fields="customer_id:string,total:f64,status:string"
+```
+
+Generates `src/modules/order/`:
+- `mod.rs`: `AppModule` implementation mounting routes and admin resource.
+- `model.rs`: Typed Rust struct with camelCase serde derivation.
+- `repository.rs`: Strongly-typed repository with transactional methods.
+- `request.rs`: Compile-time validated request DTOs.
+- `controller.rs`: Axum handler functions returning `ApiResponse<T>`.
+- `resource.rs`: AdminPanel specification with searchable and sortable columns.
+- `migration.sql`: Typed database table definition.
+
+### 3. Compile-Time Type-Safe Validation (Zero Stringly Rules)
+Eliminate runtime parsing failures and typo bugs. Terminus replaces runtime string rules with compile-checked fluent validation:
+
+```rust
+use terminus::prelude::*;
+
+let result = Validator::new(&payload)
+    .rule("email", |r| !r.email.is_empty(), "Email is required")
+    .rule("email", |r| r.email.contains('@'), "Must be a valid email")
+    .rule("amount", |r| r.amount > 0.0, "Amount must be positive")
+    .rule_when(|r| r.is_rush, "amount", |r| r.amount >= 50.0, "Rush orders require min $50")
+    .validate();
+```
+
+---
+
 ## Global Ergonomic Helpers
 
 Terminus provides zero-ceremony global helpers accessible everywhere in your application without passing context instances around:
